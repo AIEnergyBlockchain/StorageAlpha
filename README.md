@@ -2,29 +2,43 @@
 
 [中文版本 (README_ZH.md)](README_ZH.md)
 
-## Why This Builder
-
-> Huawei Digital Energy engineer with 3+ years in photovoltaic systems,
-> combining embedded firmware, AI optimization, and smart contract development.
-
-| Domain | Experience |
-|--------|-----------|
-| Energy | PV inverter firmware (embedded C) · PVEMS AI algorithm optimization |
-| AI | LSTM load forecasting · MILP dispatch optimization |
-| Blockchain | Solidity · Chainlink Oracle · Hardhat |
-| Education | Zhejiang University B.S. |
+# DR Agent — Demand Response Automated Settlement
 
 ---
 
-## Full Commercial Document
+## Navigation
 
-# DR Agent — Demand Response Automated Settlement (Commercial Version)
+### Commercial Overview
 
----
+- [1. Problem We Solve](#1-problem-we-solve)
+- [2. Product Definition](#2-product-definition)
+- [3. Why Now](#3-why-now)
+- [4. Why Avalanche](#4-why-avalanche)
+- [5. Target Customers and Value](#5-target-customers-and-value)
+- [6. Business Model (MVP Stage)](#6-business-model-mvp-stage)
+- [7. Competition and Differentiation](#7-competition-and-differentiation)
+- [8. Risks and Mitigations](#8-risks-and-mitigations)
+- [9. Suggested Milestones](#9-suggested-milestones)
+- [10. Why This Builder](#10-why-this-builder)
+
+### Technical Manual
+
+- [1. Development Goal](#1-development-goal)
+- [2. System Architecture](#2-system-architecture)
+- [3. Contract Design (MVP)](#3-contract-design-mvp)
+- [4. Data Models](#4-data-models)
+- [5. Off-chain Services (Python)](#5-off-chain-services-python)
+- [6. API (FastAPI)](#6-api-fastapi)
+- [7. Frontend (Minimum Pages)](#7-frontend-minimum-pages)
+- [7.1 Product-Grade Expansion Plan](#71-product-grade-expansion-plan)
+- [8. 6-Week Development Plan](#8-6-week-development-plan)
+- [9. Test Checklist](#9-test-checklist)
+- [10. Security and Scope Boundaries](#10-security-and-scope-boundaries)
 
 ## 1. Problem We Solve
 
-Demand Response (DR) has two persistent real-world pain points:
+Demand Response (DR): adjusting end-user electricity consumption patterns in response to incentive signals or market price fluctuations to balance grid supply and demand.
+DR has two persistent real-world pain points:
 
 1. Fulfillment is hard to verify
 
@@ -54,7 +68,7 @@ One sentence:
 - AI can improve event-time dispatch decisions, but a trusted shared settlement layer is missing.
 - Avalanche’s app-chain and interoperability capabilities are well suited to multi-party, rule-based, auditable energy settlement.
 
-## 4. Why Avalanche (not generic chain positioning)
+## 4. Why Avalanche
 
 1. Low latency and deterministic settlement for event-driven workflows.
 2. Customizable L1/Subnet path for energy-specific rule encoding.
@@ -100,33 +114,7 @@ One sentence:
 2. **Verifiable fulfillment**: disputes can be replayed on-chain.
 3. **Programmable rule templates**: configurable for different regional DR programs.
 
-## 8. Hackathon Evaluation Mapping (Avalanche Lens)
-
-1. Builder Drive
-
-- Targets a real operational pain point, not a concept-only agent.
-
-2. Execution
-
-- Demo shows full loop: event issuance -> response proof -> automated settlement -> audit visualization.
-
-3. Crypto Culture
-
-- On-chain state machine is core to trust and settlement, not decorative storage.
-
-4. Long-term Intent
-
-- Start with one region/aggregator, then scale to cross-region rule network.
-
-## 9. 5-Minute Demo Design
-
-1. Publish one DR event (target: 300kW reduction, duration: 60 minutes).
-2. Two sites submit fulfillment proofs.
-3. Contract computes completion and payouts automatically.
-4. Dashboard shows settlement records and audit logs.
-5. Compare against manual settlement lead time.
-
-## 10. Risks and Mitigations
+## 8. Risks and Mitigations
 
 1. Compliance and responsibility boundaries
 
@@ -140,24 +128,31 @@ One sentence:
 
 - Template-based rule engine; start with one jurisdiction MVP.
 
-## 11. Suggested Milestones
+## 9. Suggested Milestones
 
 - Week 1: event model + settlement contracts + basic UI
 - Week 2: proof pipeline and automated scoring
 - Week 3: end-to-end stress testing and demo hardening
 
-Conclusion:
-**DR Agent is an executable, auditable, and commercializable Avalanche-native energy application fit for hackathon visibility and startup extension.**
+## 10. Why This Builder
+
+> Huawei Digital Energy engineer with 3+ years in photovoltaic systems,
+> combining embedded firmware, AI optimization, and smart contract development.
+
+| Domain     | Experience                                                          |
+| ---------- | ------------------------------------------------------------------- |
+| Energy     | PV inverter firmware (embedded C) · PVEMS AI algorithm optimization |
+| AI         | LSTM load forecasting · MILP dispatch optimization                  |
+| Blockchain | Solidity · Chainlink Oracle · Hardhat                               |
+| Education  | Zhejiang University B.S.                                            |
 
 ---
-
-## Full Technical Document
 
 # DR Agent — Technical Development Manual
 
 ## 1. Development Goal
 
-Deliver a demo-ready MVP in 3 weeks:
+Deliver a demo-ready MVP in 6 weeks:
 
 - Event Creation
 - Proof Submission
@@ -348,6 +343,28 @@ Modules:
 3. Audit page
 
 - input eventId/siteId to compare on-chain record with off-chain payload hash
+
+### 7.1 Product-Grade Expansion Plan
+
+1. Typed API and domain contracts
+
+- Generate and use a typed client for all frontend API calls.
+- Keep UI state models aligned with backend response schemas.
+
+2. Auth, RBAC, and resilient UX states
+
+- Enforce role boundaries for operator, participant, and auditor actions.
+- Cover loading, empty, stale, and error states on every key view.
+
+3. Observability and audit alignment
+
+- Standardize frontend event logs and include trace identifiers on failures.
+- Keep operation records consistent with on-chain events and API logs.
+
+4. Release hardening and E2E gates
+
+- Add end-to-end tests for event creation, proof submission, settlement, and audit.
+- Complete release checklist before demo or production rollout.
 
 ## 8. 6-Week Development Plan
 
