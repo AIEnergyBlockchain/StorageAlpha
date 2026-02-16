@@ -2,6 +2,18 @@
 
 [中文版本 (README_ZH.md)](README_ZH.md)
 
+## Why This Builder
+
+> Huawei Digital Energy engineer with 3+ years in photovoltaic systems,
+> combining embedded firmware, AI optimization, and smart contract development.
+
+| Domain | Experience |
+|--------|-----------|
+| Energy | PV inverter firmware (embedded C) · PVEMS AI algorithm optimization |
+| AI | LSTM load forecasting · MILP dispatch optimization |
+| Blockchain | Solidity · Chainlink Oracle · Hardhat |
+| Education | Zhejiang University B.S. |
+
 ---
 
 ## Full Commercial Document
@@ -337,22 +349,33 @@ Modules:
 
 - input eventId/siteId to compare on-chain record with off-chain payload hash
 
-## 8. 3-Week Development Plan
+## 8. 6-Week Development Plan
 
 ### Week 1
 
 - Build 3 core contracts + unit tests
-- Run local flow: createEvent -> submitProof -> settle
 
 ### Week 2
 
-- Wrap chain interactions with FastAPI
-- Integrate frontend query/trigger actions
-- Simulate 2-3 site datasets
+- Run local flow: createEvent -> submitProof -> settle
+- Contract integration tests
 
 ### Week 3
 
+- Wrap chain interactions with FastAPI
+
+### Week 4
+
+- Integrate frontend query/trigger actions
+- Simulate 2-3 site datasets
+
+### Week 5
+
 - Add exception scenarios (late proof, missing data, under-performance)
+
+### Week 6
+
+- End-to-end stress test
 - Harden demo script and recording flow
 
 ## 9. Test Checklist
