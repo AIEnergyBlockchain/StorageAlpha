@@ -84,9 +84,22 @@ ship:
 sup:
 	@if [ -z "$(msg)" ]; then echo "Error: 请输入 msg='说明文字'"; exit 1; fi
 	@echo ">>> 正在同步子模块..."
-	@cd $(SUB_PATH) && git add -A && git commit -m "[Submodule] $(msg)" && git push
+	@cd $(SUB_PATH) && \
+	git add -A && \
+	if git diff --cached --quiet; then \
+		echo ">>> 子模块无变更，直接 push 当前分支"; \
+		git push; \
+	else \
+		git commit -m "[Submodule] $(msg)" && git push; \
+	fi
 	@echo ">>> 正在同步主仓库..."
-	@$(MAKE) up msg="chore: sync submodule - $(msg)"
+	@git add -A && \
+	if git diff --cached --quiet; then \
+		echo ">>> 主仓库无变更，直接 push 当前分支"; \
+		git push; \
+	else \
+		$(MAKE) up msg="chore: sync submodule - $(msg)"; \
+	fi
 
 # 5. Skill 命令说明
 skill-help:
