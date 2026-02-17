@@ -23,6 +23,7 @@
 
 ### Technical Manual
 
+- [0. Local Quick Start (5-Minute Loop)](#0-local-quick-start-5-minute-loop)
 - [1. Development Goal](#1-development-goal)
 - [2. System Architecture](#2-system-architecture)
 - [3. Contract Design (MVP)](#3-contract-design-mvp)
@@ -34,6 +35,7 @@
 - [8. 6-Week Development Plan](#8-6-week-development-plan)
 - [9. Test Checklist](#9-test-checklist)
 - [10. Security and Scope Boundaries](#10-security-and-scope-boundaries)
+- [11. Demo and Deployment Assets](#11-demo-and-deployment-assets)
 
 ## 1. Problem We Solve
 
@@ -150,6 +152,65 @@ One sentence:
 
 # DR Agent — Technical Development Manual
 
+## 0. Local Quick Start (5-Minute Loop)
+
+Environment prerequisites:
+
+- Node.js 20.x or 22.x recommended (`hardhat` warns on Node 23).
+- Python 3.10+ with `venv` available.
+
+Step 1: install and validate contracts
+
+```bash
+npm install
+npm run test:contracts
+```
+
+Step 2: bootstrap API environment and smoke test
+
+```bash
+npm run setup:api
+source .venv/bin/activate
+```
+
+If your machine cannot access PyPI directly:
+
+```bash
+export PIP_INDEX_URL=<internal-mirror-url>
+# or
+export WHEELHOUSE_DIR=<path-to-offline-wheelhouse>
+npm run setup:api
+```
+
+Step 3: run API server
+
+```bash
+uvicorn services.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+Step 4: run walkthrough flow (new terminal)
+
+```bash
+npm run demo:walkthrough
+```
+
+Step 5: open minimal frontend shell (optional)
+
+```bash
+npm run frontend:serve
+# open http://127.0.0.1:4173
+```
+
+Cross-origin note:
+
+- API allows demo UI origins by default: `http://127.0.0.1:4173,http://localhost:4173`.
+- Override with `DR_CORS_ORIGINS` if needed.
+
+Notes:
+
+- API smoke script: `npm run smoke:api`
+- Full Python dependencies (including Prophet): `npm run setup:python`
+
 ## 1. Development Goal
 
 Deliver a demo-ready MVP in 6 weeks:
@@ -237,6 +298,10 @@ sequenceDiagram
         PR-->>D: ProofSubmitted
     end
 
+    O->>API: POST /events/{event_id}/close
+    API->>EM: closeEvent(eventId)
+    EM-->>D: EventClosed
+
     O->>API: POST /settle/{event_id}
     API->>ST: settleEvent(eventId)
     ST-->>D: Settled(payouts)
@@ -319,16 +384,19 @@ Modules:
 1. `collector.py`: collect/simulate load data
 2. `baseline.py`: baseline generation (7-day same-hour average for MVP)
 3. `proof_builder.py`: payload + hash builder
-4. `submitter.py`: submit proof to contracts
+4. `submitter.py`: orchestrate proof and settlement writes (MVP simulated tx mode)
 5. `scorer.py`: settlement trigger at event end
 
 ## 6. API (FastAPI)
 
 - `POST /events` create event
+- `POST /events/{event_id}/close` close event before settlement
 - `POST /proofs` submit site proof
 - `POST /settle/{event_id}` trigger settlement
 - `GET /events/{event_id}` query event state
 - `GET /events/{event_id}/records` query settlement details
+- `GET /audit/{event_id}/{site_id}` verify proof hash consistency
+- `GET /system/chain-mode` expose runtime chain execution mode
 
 ## 7. Frontend (Minimum Pages)
 
@@ -374,7 +442,7 @@ Modules:
 
 ### Week 2
 
-- Run local flow: createEvent -> submitProof -> settle
+- Run local flow: createEvent -> submitProof -> closeEvent -> settle
 - Contract integration tests
 
 ### Week 3
@@ -408,7 +476,7 @@ Modules:
 ### Integration tests
 
 1. continuous reporting during event window
-2. automatic settlement after event end
+2. settlement only after explicit close event
 3. UI state consistent with on-chain state
 
 ### Demo tests
@@ -422,7 +490,7 @@ Modules:
 1. Access control
 
 - only operator can create/close events
-- only registered sites can submit proof
+- only participant role can submit proof (site registry is a planned enhancement)
 
 2. Data integrity
 
@@ -434,3 +502,17 @@ Modules:
 - no direct control of real grid dispatch
 - no advanced multi-market rule engine
 - no cross-jurisdiction compliance engine
+
+## 11. Demo and Deployment Assets
+
+- Frontend shell: `frontend/index.html`
+- Frontend logic: `frontend/app.js`
+- Frontend styling: `frontend/styles.css`
+- End-to-end walkthrough script: `scripts/demo_walkthrough.sh`
+- API setup script: `scripts/setup_python_env.sh`
+- API smoke script: `scripts/smoke_api_flow.py`
+- Fuji deployment script: `scripts/deploy_fuji.ts`
+- Walkthrough doc: `guide/docs/DR-Agent-Walkthrough-2026-02-17.md`
+- Fuji deployment record: `guide/docs/Fuji-Deployment-Record-2026-02-17.md`
+- Fuji deployment record template: `guide/docs/Fuji-Deployment-Record-Template.md`
+- Reproducibility runbook: `guide/docs/DR-Agent-Reproducibility-Runbook-2026-02-17.md`

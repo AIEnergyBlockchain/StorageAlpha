@@ -21,6 +21,7 @@
 
 ### 技术版导航
 
+- [0. 本地 5 分钟快速跑通](#0-本地-5-分钟快速跑通)
 - [1. 开发目标](#1-开发目标)
 - [2. 系统架构](#2-系统架构)
 - [3. 合约设计（MVP）](#3-合约设计mvp)
@@ -32,6 +33,7 @@
 - [8. 开发计划（6 周）](#8-开发计划6-周)
 - [9. 测试清单](#9-测试清单)
 - [10. 安全与边界](#10-安全与边界)
+- [11. 演示与部署资产](#11-演示与部署资产)
 
 ## 1. 我们解决的问题
 
@@ -147,6 +149,61 @@
 
 # DR Agent — 技术版开发手册
 
+## 0. 本地 5 分钟快速跑通
+
+环境前置：
+
+- 推荐 Node.js 20.x 或 22.x（Node 23 会触发 Hardhat 兼容性告警）。
+- Python 3.10+ 且支持 `venv`。
+
+步骤 1：安装依赖并验证合约
+
+```bash
+npm install
+npm run test:contracts
+```
+
+步骤 2：初始化 API Python 环境并执行健康检查
+
+```bash
+npm run setup:api
+source .venv/bin/activate
+```
+
+如果当前机器无法直连 PyPI，可先配置：
+
+```bash
+export PIP_INDEX_URL=<内网镜像地址>
+# 或
+export WHEELHOUSE_DIR=<离线 wheel 包目录>
+npm run setup:api
+```
+
+步骤 3：启动 API
+
+```bash
+uvicorn services.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+步骤 4：执行演示闭环（新终端）
+
+```bash
+npm run demo:walkthrough
+```
+
+步骤 5：可选启动前端演示壳
+
+```bash
+npm run frontend:serve
+# 浏览器打开 http://127.0.0.1:4173
+```
+
+补充：
+
+- API 健康检查可单独执行：`npm run smoke:api`
+- 完整 Python 依赖（含 Prophet）：`npm run setup:python`
+- 默认允许前端跨域来源：`http://127.0.0.1:4173,http://localhost:4173`，可用 `DR_CORS_ORIGINS` 覆盖
+
 ## 1. 开发目标
 
 在 6 周内完成一个可演示 MVP：
@@ -234,6 +291,10 @@ sequenceDiagram
         PR-->>D: ProofSubmitted
     end
 
+    O->>API: POST /events/{event_id}/close
+    API->>EM: closeEvent(eventId)
+    EM-->>D: EventClosed
+
     O->>API: POST /settle/{event_id}
     API->>ST: settleEvent(eventId)
     ST-->>D: Settled(payouts)
@@ -316,16 +377,19 @@ sequenceDiagram
 1. `collector.py`：采集/模拟负荷数据
 2. `baseline.py`：生成 baseline（MVP 用近 7 天同小时均值）
 3. `proof_builder.py`：构造 payload + hash
-4. `submitter.py`：调用合约提交 proof
+4. `submitter.py`：编排 proof 与结算写入（MVP 模拟交易模式）
 5. `scorer.py`：事件结束后触发结算
 
 ## 6. API（FastAPI）
 
 - `POST /events` 创建事件
+- `POST /events/{event_id}/close` 在结算前关闭事件
 - `POST /proofs` 提交站点履约
 - `POST /settle/{event_id}` 触发结算
 - `GET /events/{event_id}` 查询事件状态
 - `GET /events/{event_id}/records` 查询结算明细
+- `GET /audit/{event_id}/{site_id}` 校验 proof hash 一致性
+- `GET /system/chain-mode` 输出当前链执行模式
 
 ## 7. 前端（最小页面）
 
@@ -371,7 +435,7 @@ sequenceDiagram
 
 ### Week 2
 
-- 本地脚本跑通：createEvent → submitProof → settle
+- 本地脚本跑通：createEvent → submitProof → closeEvent → settle
 - 合约集成测试
 
 ### Week 3
@@ -405,7 +469,7 @@ sequenceDiagram
 ### 集成测试
 
 1. 事件期内持续上报
-2. 事件结束后自动结算
+2. 仅在显式关闭事件后才允许结算
 3. 前端数据与链上数据一致
 
 ### 演示测试
@@ -419,7 +483,7 @@ sequenceDiagram
 1. 权限控制
 
 - 仅 operator 可创建/关闭事件
-- 仅注册站点可提交 proof
+- 仅 participant 角色可提交 proof（站点注册机制为后续增强项）
 
 2. 数据完整性
 
@@ -431,3 +495,17 @@ sequenceDiagram
 - 不做真实电网调度接管
 - 不做复杂市场规则引擎
 - 不做跨法域合规模块
+
+## 11. 演示与部署资产
+
+- 前端演示壳：`frontend/index.html`
+- 前端逻辑：`frontend/app.js`
+- 前端样式：`frontend/styles.css`
+- 一键演示脚本：`scripts/demo_walkthrough.sh`
+- API 环境初始化脚本：`scripts/setup_python_env.sh`
+- API 健康检查脚本：`scripts/smoke_api_flow.py`
+- Fuji 部署脚本：`scripts/deploy_fuji.ts`
+- 演示脚本文档：`guide/docs/DR-Agent-Walkthrough-2026-02-17.md`
+- Fuji 部署记录：`guide/docs/Fuji-Deployment-Record-2026-02-17.md`
+- Fuji 部署模板：`guide/docs/Fuji-Deployment-Record-Template.md`
+- 可复现运行手册：`guide/docs/DR-Agent-Reproducibility-Runbook-2026-02-17.md`
