@@ -97,6 +97,41 @@ class SubmitterService:
             raise ServiceError(404, "EVENT_NOT_FOUND", "event not found")
         return EventDTO(**dict(row))
 
+    def close_event(self, event_id: str) -> EventDTO:
+        row = self.conn.execute(
+            """
+            SELECT event_id,start_time,end_time,target_kw,reward_rate,penalty_rate,status
+            FROM events WHERE event_id = ?
+            """,
+            (event_id,),
+        ).fetchone()
+        if row is None:
+            raise ServiceError(404, "EVENT_NOT_FOUND", "event not found")
+
+        if row["status"] == "closed":
+            raise ServiceError(409, "EVENT_ALREADY_CLOSED", "event already closed")
+        if row["status"] == "settled":
+            raise ServiceError(409, "EVENT_ALREADY_SETTLED", "event already settled")
+        if row["status"] != "active":
+            raise ServiceError(409, "INVALID_EVENT_STATE", "event cannot be closed from current state")
+
+        closed_at = _utc_now()
+        self.conn.execute(
+            "UPDATE events SET status = 'closed', closed_at = ? WHERE event_id = ?",
+            (closed_at, event_id),
+        )
+        self.conn.commit()
+
+        return EventDTO(
+            event_id=row["event_id"],
+            start_time=row["start_time"],
+            end_time=row["end_time"],
+            target_kw=row["target_kw"],
+            reward_rate=row["reward_rate"],
+            penalty_rate=row["penalty_rate"],
+            status="closed",
+        )
+
     def submit_proof(self, req: ProofSubmitRequest, actor_id: str) -> ProofDTO:
         event = self.conn.execute(
             "SELECT status FROM events WHERE event_id = ?",
@@ -176,8 +211,8 @@ class SubmitterService:
         if event["status"] == "settled":
             raise ServiceError(409, "EVENT_ALREADY_SETTLED", "event already settled")
 
-        if event["status"] not in {"active", "closed"}:
-            raise ServiceError(409, "INVALID_EVENT_STATE", "event cannot be settled from current state")
+        if event["status"] != "closed":
+            raise ServiceError(409, "EVENT_NOT_CLOSED", "event must be closed before settlement")
 
         if not site_ids:
             rows = self.conn.execute(
@@ -192,72 +227,80 @@ class SubmitterService:
         target_share = event["target_kw"] // len(site_ids)
         now = _utc_now()
 
-        self.conn.execute(
-            "UPDATE events SET status = 'closed', closed_at = COALESCE(closed_at, ?) WHERE event_id = ?",
-            (now, event_id),
-        )
-
         created: list[SettlementDTO] = []
-        for site_id in site_ids:
-            proof = self.conn.execute(
-                """
-                SELECT reduction_kwh FROM proofs
-                WHERE event_id = ? AND site_id = ?
-                """,
-                (event_id, site_id),
-            ).fetchone()
-            if proof is None:
-                raise ServiceError(
-                    400,
-                    "PROOF_MISSING",
-                    "proof missing for one or more site_ids",
-                    details={"site_id": site_id},
+        try:
+            self.conn.execute("BEGIN")
+            for site_id in site_ids:
+                proof = self.conn.execute(
+                    """
+                    SELECT reduction_kwh FROM proofs
+                    WHERE event_id = ? AND site_id = ?
+                    """,
+                    (event_id, site_id),
+                ).fetchone()
+                if proof is None:
+                    raise ServiceError(
+                        400,
+                        "PROOF_MISSING",
+                        "proof missing for one or more site_ids",
+                        details={"site_id": site_id},
+                    )
+
+                existing = self.conn.execute(
+                    "SELECT 1 FROM settlements WHERE event_id = ? AND site_id = ?",
+                    (event_id, site_id),
+                ).fetchone()
+                if existing is not None:
+                    raise ServiceError(
+                        409,
+                        "ALREADY_SETTLED",
+                        "settlement record already exists",
+                        details={"site_id": site_id},
+                    )
+
+                payout = calculate_payout(
+                    reduction_kwh=proof["reduction_kwh"],
+                    target_share=target_share,
+                    reward_rate=event["reward_rate"],
+                    penalty_rate=event["penalty_rate"],
                 )
 
-            existing = self.conn.execute(
-                "SELECT 1 FROM settlements WHERE event_id = ? AND site_id = ?",
-                (event_id, site_id),
-            ).fetchone()
-            if existing is not None:
-                raise ServiceError(
-                    409,
-                    "ALREADY_SETTLED",
-                    "settlement record already exists",
-                    details={"site_id": site_id},
+                tx_hash = _tx_hash()
+                self.conn.execute(
+                    """
+                    INSERT INTO settlements(event_id,site_id,payout,status,settled_at,tx_hash)
+                    VALUES(?,?,?,?,?,?)
+                    """,
+                    (event_id, site_id, payout, "settled", now, tx_hash),
                 )
 
-            payout = calculate_payout(
-                reduction_kwh=proof["reduction_kwh"],
-                target_share=target_share,
-                reward_rate=event["reward_rate"],
-                penalty_rate=event["penalty_rate"],
-            )
+                created.append(
+                    SettlementDTO(
+                        event_id=event_id,
+                        site_id=site_id,
+                        payout=payout,
+                        status="settled",
+                        settled_at=now,
+                        tx_hash=tx_hash,
+                    )
+                )
 
-            tx_hash = _tx_hash()
             self.conn.execute(
-                """
-                INSERT INTO settlements(event_id,site_id,payout,status,settled_at,tx_hash)
-                VALUES(?,?,?,?,?,?)
-                """,
-                (event_id, site_id, payout, "settled", now, tx_hash),
+                "UPDATE events SET status = 'settled', settled_at = ? WHERE event_id = ?",
+                (now, event_id),
             )
-
-            created.append(
-                SettlementDTO(
-                    event_id=event_id,
-                    site_id=site_id,
-                    payout=payout,
-                    status="settled",
-                    settled_at=now,
-                    tx_hash=tx_hash,
-                )
-            )
-
-        self.conn.execute(
-            "UPDATE events SET status = 'settled', settled_at = ? WHERE event_id = ?",
-            (now, event_id),
-        )
-        self.conn.commit()
+            self.conn.commit()
+        except ServiceError:
+            self.conn.rollback()
+            raise
+        except sqlite3.DatabaseError as exc:
+            self.conn.rollback()
+            raise ServiceError(
+                500,
+                "SETTLEMENT_TX_FAILED",
+                "database transaction failed during settlement",
+                retryable=True,
+            ) from exc
 
         return created
 
@@ -353,4 +396,5 @@ def _to_rfc3339(value: datetime) -> str:
 
 
 def _tx_hash() -> str:
+    # MVP service path currently returns simulated tx hash from local orchestration.
     return "0x" + uuid.uuid4().hex + uuid.uuid4().hex

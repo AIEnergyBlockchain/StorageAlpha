@@ -7,6 +7,7 @@ import uuid
 from typing import Callable
 
 from fastapi import Body, Depends, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from services.dto import (
@@ -20,6 +21,13 @@ from services.dto import (
     SettlementDTO,
 )
 from services.submitter import ServiceError, SubmitterService
+
+
+def _cors_origins() -> list[str]:
+    configured = os.getenv("DR_CORS_ORIGINS", "").strip()
+    if configured:
+        return [origin.strip() for origin in configured.split(",") if origin.strip()]
+    return ["http://127.0.0.1:4173", "http://localhost:4173"]
 
 
 def _role_map() -> dict[str, str]:
@@ -54,6 +62,13 @@ def _service(request: Request) -> SubmitterService:
 def create_app(db_path: str | None = None) -> FastAPI:
     app = FastAPI(title="DR Agent API", version="0.1.0")
     app.state.submitter = SubmitterService(db_path=db_path)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins(),
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.middleware("http")
     async def trace_middleware(request: Request, call_next):
@@ -82,6 +97,14 @@ def create_app(db_path: str | None = None) -> FastAPI:
         svc: SubmitterService = Depends(_service),
     ):
         return svc.create_event(payload)
+
+    @app.post("/events/{event_id}/close", response_model=EventDTO)
+    def close_event(
+        event_id: str,
+        _role: str = Depends(_require_role("operator")),
+        svc: SubmitterService = Depends(_service),
+    ):
+        return svc.close_event(event_id)
 
     @app.post("/proofs", response_model=ProofDTO)
     def submit_proof(
@@ -135,6 +158,12 @@ def create_app(db_path: str | None = None) -> FastAPI:
         svc: SubmitterService = Depends(_service),
     ):
         return svc.get_audit(event_id, site_id)
+
+    @app.get("/system/chain-mode")
+    def get_chain_mode(
+        _role: str = Depends(_require_role("operator", "participant", "auditor")),
+    ):
+        return {"mode": os.getenv("DR_CHAIN_MODE", "simulated")}
 
     return app
 

@@ -56,6 +56,10 @@ def test_closed_loop_create_submit_settle_claim_audit(tmp_path: Path):
     assert resp_a.status_code == 200
     assert resp_b.status_code == 200
 
+    closed = client.post(f"/events/{event_payload['event_id']}/close", headers=operator)
+    assert closed.status_code == 200
+    assert closed.json()["status"] == "closed"
+
     settled = client.post(
         f"/settle/{event_payload['event_id']}",
         json={"site_ids": ["site-a", "site-b"]},
@@ -149,6 +153,8 @@ def test_forbidden_settlement_for_non_operator(tmp_path: Path):
         headers=participant,
     )
 
+    client.post("/events/event-forbidden-settle/close", headers=operator)
+
     settled = client.post(
         "/settle/event-forbidden-settle",
         json={"site_ids": ["site-a"]},
@@ -157,3 +163,45 @@ def test_forbidden_settlement_for_non_operator(tmp_path: Path):
 
     assert settled.status_code == 403
     assert settled.json()["code"] == "FORBIDDEN"
+
+
+def test_settle_requires_closed_event(tmp_path: Path):
+    app = create_app(db_path=str(tmp_path / "dr_agent_test.db"))
+    client = TestClient(app)
+
+    operator = _headers("operator-key", "operator-1")
+    participant = _headers("participant-key", "site-a")
+
+    client.post(
+        "/events",
+        json={
+            "event_id": "event-must-close-first",
+            "start_time": "2026-02-17T10:00:00Z",
+            "end_time": "2026-02-17T11:00:00Z",
+            "target_kw": 100,
+            "reward_rate": 10,
+            "penalty_rate": 5,
+        },
+        headers=operator,
+    )
+
+    client.post(
+        "/proofs",
+        json={
+            "event_id": "event-must-close-first",
+            "site_id": "site-a",
+            "baseline_kwh": 100,
+            "actual_kwh": 70,
+            "uri": "ipfs://site-a",
+            "baseline_method": "simple",
+        },
+        headers=participant,
+    )
+
+    settled = client.post(
+        "/settle/event-must-close-first",
+        json={"site_ids": ["site-a"]},
+        headers=operator,
+    )
+    assert settled.status_code == 409
+    assert settled.json()["code"] == "EVENT_NOT_CLOSED"
