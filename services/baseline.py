@@ -80,3 +80,18 @@ def compute_baseline_prophet(
         logger.warning("Prophet failed (%s), falling back to simple method", e)
         event_hour = pd.Timestamp(event_start).hour
         return compute_baseline_simple(history_df, event_hour)
+
+
+def compute_baseline_with_method(
+    history_df: pd.DataFrame,
+    event_start: str,
+    event_end: str,
+) -> tuple[float, str]:
+    """Return baseline value and method label for audit tracking."""
+    try:
+        baseline = compute_baseline_prophet(history_df, event_start, event_end)
+        return baseline, "prophet"
+    except Exception:
+        event_hour = pd.Timestamp(event_start).hour
+        baseline = compute_baseline_simple(history_df, event_hour)
+        return baseline, "simple"

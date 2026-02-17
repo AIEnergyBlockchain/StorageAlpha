@@ -1,0 +1,159 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+
+from services.api import create_app
+
+
+def _headers(api_key: str, actor_id: str) -> dict[str, str]:
+    return {"x-api-key": api_key, "x-actor-id": actor_id}
+
+
+def test_closed_loop_create_submit_settle_claim_audit(tmp_path: Path):
+    app = create_app(db_path=str(tmp_path / "dr_agent_test.db"))
+    client = TestClient(app)
+
+    operator = _headers("operator-key", "operator-1")
+    participant_a = _headers("participant-key", "site-a")
+    participant_b = _headers("participant-key", "site-b")
+    auditor = _headers("auditor-key", "auditor-1")
+
+    event_payload = {
+        "event_id": "event-2026-closed-loop",
+        "start_time": "2026-02-17T10:00:00Z",
+        "end_time": "2026-02-17T11:00:00Z",
+        "target_kw": 200,
+        "reward_rate": 10,
+        "penalty_rate": 5,
+    }
+    created = client.post("/events", json=event_payload, headers=operator)
+    assert created.status_code == 200
+    assert created.json()["status"] == "active"
+
+    proof_a = {
+        "event_id": event_payload["event_id"],
+        "site_id": "site-a",
+        "baseline_kwh": 150,
+        "actual_kwh": 40,
+        "uri": "ipfs://site-a-raw",
+        "raw_payload": {"meter": [10, 20, 30]},
+        "baseline_method": "simple",
+    }
+    proof_b = {
+        "event_id": event_payload["event_id"],
+        "site_id": "site-b",
+        "baseline_kwh": 150,
+        "actual_kwh": 120,
+        "uri": "ipfs://site-b-raw",
+        "raw_payload": {"meter": [11, 21, 31]},
+        "baseline_method": "prophet",
+    }
+
+    resp_a = client.post("/proofs", json=proof_a, headers=participant_a)
+    resp_b = client.post("/proofs", json=proof_b, headers=participant_b)
+    assert resp_a.status_code == 200
+    assert resp_b.status_code == 200
+
+    settled = client.post(
+        f"/settle/{event_payload['event_id']}",
+        json={"site_ids": ["site-a", "site-b"]},
+        headers=operator,
+    )
+    assert settled.status_code == 200
+    assert len(settled.json()) == 2
+
+    claim = client.post(
+        f"/claim/{event_payload['event_id']}/site-a",
+        headers=participant_a,
+    )
+    assert claim.status_code == 200
+    assert claim.json()["status"] == "claimed"
+
+    records = client.get(f"/events/{event_payload['event_id']}/records", headers=auditor)
+    assert records.status_code == 200
+    assert len(records.json()) == 2
+
+    audit = client.get(f"/audit/{event_payload['event_id']}/site-a", headers=auditor)
+    assert audit.status_code == 200
+    assert audit.json()["match"] is True
+
+
+def test_duplicate_proof_is_blocked(tmp_path: Path):
+    app = create_app(db_path=str(tmp_path / "dr_agent_test.db"))
+    client = TestClient(app)
+
+    operator = _headers("operator-key", "operator-1")
+    participant = _headers("participant-key", "site-a")
+
+    client.post(
+        "/events",
+        json={
+            "event_id": "event-dup-proof",
+            "start_time": "2026-02-17T10:00:00Z",
+            "end_time": "2026-02-17T11:00:00Z",
+            "target_kw": 100,
+            "reward_rate": 10,
+            "penalty_rate": 5,
+        },
+        headers=operator,
+    )
+
+    payload = {
+        "event_id": "event-dup-proof",
+        "site_id": "site-a",
+        "baseline_kwh": 100,
+        "actual_kwh": 80,
+        "uri": "ipfs://dup-proof",
+        "baseline_method": "simple",
+    }
+
+    first = client.post("/proofs", json=payload, headers=participant)
+    second = client.post("/proofs", json=payload, headers=participant)
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert second.json()["code"] == "PROOF_EXISTS"
+
+
+def test_forbidden_settlement_for_non_operator(tmp_path: Path):
+    app = create_app(db_path=str(tmp_path / "dr_agent_test.db"))
+    client = TestClient(app)
+
+    operator = _headers("operator-key", "operator-1")
+    participant = _headers("participant-key", "site-a")
+
+    client.post(
+        "/events",
+        json={
+            "event_id": "event-forbidden-settle",
+            "start_time": "2026-02-17T10:00:00Z",
+            "end_time": "2026-02-17T11:00:00Z",
+            "target_kw": 100,
+            "reward_rate": 10,
+            "penalty_rate": 5,
+        },
+        headers=operator,
+    )
+
+    client.post(
+        "/proofs",
+        json={
+            "event_id": "event-forbidden-settle",
+            "site_id": "site-a",
+            "baseline_kwh": 100,
+            "actual_kwh": 70,
+            "uri": "ipfs://site-a",
+            "baseline_method": "simple",
+        },
+        headers=participant,
+    )
+
+    settled = client.post(
+        "/settle/event-forbidden-settle",
+        json={"site_ids": ["site-a"]},
+        headers=participant,
+    )
+
+    assert settled.status_code == 403
+    assert settled.json()["code"] == "FORBIDDEN"

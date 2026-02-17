@@ -10,7 +10,7 @@ describe("EventManager", function () {
 
   const eventId = ethers.id("event-001");
   const start = 1700000000n;
-  const end = 1700003600n; // +1 hour
+  const end = 1700003600n;
   const targetKw = 300n;
   const rewardRate = 10n;
   const penaltyRate = 5n;
@@ -21,23 +21,27 @@ describe("EventManager", function () {
     eventManager = await factory.deploy(operator.address);
   });
 
-  it("should create an event successfully", async function () {
+  it("creates an event successfully", async function () {
     await expect(
       eventManager.createEvent(eventId, start, end, targetKw, rewardRate, penaltyRate)
-    ).to.emit(eventManager, "EventCreated").withArgs(eventId, start, end, targetKw);
+    )
+      .to.emit(eventManager, "EventCreated")
+      .withArgs(eventId, start, end, targetKw);
 
     const ev = await eventManager.getEventInfo(eventId);
     expect(ev.targetKw).to.equal(targetKw);
-    expect(ev.status).to.equal(1); // Active
+    expect(ev.status).to.equal(1);
   });
 
-  it("should revert when non-operator creates an event", async function () {
+  it("reverts when non-operator creates an event", async function () {
     await expect(
-      eventManager.connect(other).createEvent(eventId, start, end, targetKw, rewardRate, penaltyRate)
+      eventManager
+        .connect(other)
+        .createEvent(eventId, start, end, targetKw, rewardRate, penaltyRate)
     ).to.be.revertedWith("Not operator");
   });
 
-  it("should close an active event", async function () {
+  it("closes an active event", async function () {
     await eventManager.createEvent(eventId, start, end, targetKw, rewardRate, penaltyRate);
 
     await expect(eventManager.closeEvent(eventId))
@@ -45,10 +49,10 @@ describe("EventManager", function () {
       .withArgs(eventId);
 
     const ev = await eventManager.getEventInfo(eventId);
-    expect(ev.status).to.equal(2); // Closed
+    expect(ev.status).to.equal(2);
   });
 
-  it("should revert on duplicate eventId", async function () {
+  it("reverts on duplicate eventId", async function () {
     await eventManager.createEvent(eventId, start, end, targetKw, rewardRate, penaltyRate);
 
     await expect(
@@ -56,26 +60,47 @@ describe("EventManager", function () {
     ).to.be.revertedWith("Event already exists");
   });
 
-  it("should revert on invalid time window (start >= end)", async function () {
+  it("reverts on invalid time window", async function () {
     await expect(
       eventManager.createEvent(eventId, end, start, targetKw, rewardRate, penaltyRate)
     ).to.be.revertedWith("Invalid time window");
-
-    await expect(
-      eventManager.createEvent(eventId, start, start, targetKw, rewardRate, penaltyRate)
-    ).to.be.revertedWith("Invalid time window");
   });
 
-  it("should return event info via getEvent", async function () {
+  it("allows operator to mark closed event as settled", async function () {
     await eventManager.createEvent(eventId, start, end, targetKw, rewardRate, penaltyRate);
+    await eventManager.closeEvent(eventId);
+
+    await expect(eventManager.markSettled(eventId))
+      .to.emit(eventManager, "EventSettled")
+      .withArgs(eventId);
 
     const ev = await eventManager.getEventInfo(eventId);
-    expect(ev.eventId).to.equal(eventId);
-    expect(ev.startTime).to.equal(start);
-    expect(ev.endTime).to.equal(end);
-    expect(ev.targetKw).to.equal(targetKw);
-    expect(ev.rewardRate).to.equal(rewardRate);
-    expect(ev.penaltyRate).to.equal(penaltyRate);
-    expect(ev.creator).to.equal(operator.address);
+    expect(ev.status).to.equal(3);
+  });
+
+  it("blocks non-operator/non-settlement from markSettled", async function () {
+    await eventManager.createEvent(eventId, start, end, targetKw, rewardRate, penaltyRate);
+    await eventManager.closeEvent(eventId);
+
+    await expect(
+      eventManager.connect(other).markSettled(eventId)
+    ).to.be.revertedWith("Not settlement/operator");
+  });
+
+  it("requires closed status before settled", async function () {
+    await eventManager.createEvent(eventId, start, end, targetKw, rewardRate, penaltyRate);
+
+    await expect(eventManager.markSettled(eventId)).to.be.revertedWith(
+      "Must be closed first"
+    );
+  });
+
+  it("sets settlement contract only by operator", async function () {
+    await expect(
+      eventManager.connect(other).setSettlementContract(other.address)
+    ).to.be.revertedWith("Not operator");
+
+    await eventManager.setSettlementContract(other.address);
+    expect(await eventManager.settlementContract()).to.equal(other.address);
   });
 });

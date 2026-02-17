@@ -4,7 +4,10 @@
   "description": "[中文版本 (README_ZH.md)](README_ZH.md)",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "hardhat test",
+    "test:contracts": "hardhat test",
+    "test:baseline": "python3 scripts/test_baseline.py",
+    "test:api": "python3 -m pytest -q tests/test_api_flow.py"
   },
   "repository": {
     "type": "git",
