@@ -72,49 +72,53 @@ sup:
 		$(MAKE) up msg="chore: sync submodule - $(msg)"; \
 	fi
 
-# 5. 全自动化：主子模块同开新分支 -> 提PR -> 切回main
+# 6. 最终全自动版：任意分支提交 -> 推送 PR -> 全体切回 main
 fullpr:
-	@# 检查主仓库是否在 main 分支
-	@CURRENT_BRANCH=$$(git symbolic-ref --short HEAD); \
-	if [ "$$CURRENT_BRANCH" != "$(MAIN_BRANCH)" ]; then \
-		echo "Error: 请先手动切换到 $(MAIN_BRANCH) 分支后再运行此命令"; exit 1; \
-	fi
-	@if [ -z "$(branch)" ] || [ -z "$(msg)" ]; then \
-		echo "Error: 请指定 branch=分支名 msg='说明文字'"; exit 1; \
-	fi
-
+	@if [ -z "$(msg)" ]; then echo "Error: 请指定 msg='说明文字'"; exit 1; fi
+	
+	@# 使用 rev-parse 获取分支名，即使在 detached 状态也能拿到哈希，比 symbolic-ref 更稳
+	$(eval CUR_BRANCH := $(shell git rev-parse --abbrev-ref HEAD))
+	$(eval CUR_SUB_BRANCH := $(shell cd $(SUB_PATH) && git rev-parse --abbrev-ref HEAD))
+	
+	@echo ">>> 启动全自动流程：主仓库($(CUR_BRANCH)) | 子模块($(CUR_SUB_BRANCH))"
+	
+	@# --- [1/2] 子模块处理 ---
 	@echo ">>> [1/2] 正在处理子模块..."
 	@cd $(SUB_PATH) && \
-		git checkout $(MAIN_BRANCH) && git pull && \
-		git checkout -b $(branch) && \
 		git add -A && \
-		if git diff --cached --quiet; then \
-			echo ">>> 子模块无变更，跳过提交"; \
-		else \
+		if ! git diff --cached --quiet; then \
 			git commit -m "[Submodule] $(msg)" && \
-			git push -u origin $(branch) && \
-			gh pr create --title "[Submodule] $(msg)" --body "Automated" --base $(MAIN_BRANCH); \
+			git push origin $(CUR_SUB_BRANCH) && \
+			gh pr create --title "[Submodule] $(msg)" --body "Automated" --base $(MAIN_BRANCH) || echo "PR已存在"; \
+		else \
+			echo ">>> 子模块无变更，跳过提交"; \
 		fi && \
-		git checkout $(MAIN_BRANCH)
+		git checkout $(MAIN_BRANCH) && git pull origin $(MAIN_BRANCH)
 
+	@# --- [2/2] 主仓库处理 ---
 	@echo ">>> [2/2] 正在处理主仓库..."
-	@git checkout -b $(branch) || git checkout $(branch)
-	@git add -A  # 确保主仓库的 Makefile 修改被加入
-	@if git diff --cached --quiet; then \
-		echo "主仓库无变更，跳过提交"; \
+	@# 关键：先 ADD，再判断 diff，最后才准切换分支
+	@git add -A
+	@if ! git diff --cached --quiet; then \
+		git commit -m "[Main] $(msg)" && \
+		git push origin $(CUR_BRANCH) && \
+		gh pr create --title "[Main] $(msg)" --body "Automated" --base $(MAIN_BRANCH) || echo "PR已存在"; \
 	else \
-		git commit -m "[Main] $(msg)" && git push -u origin $(branch); \
+		echo ">>> 主仓库无变更，跳过提交"; \
 	fi
-	@# 检查 PR 是否已存在，不存在则创建
-	@gh pr view $(branch) >/dev/null 2>&1 || \
-		gh pr create --title "[Main] $(msg)" --body "Automated" --base $(MAIN_BRANCH)
-	@git checkout $(MAIN_BRANCH)
+	@git checkout $(MAIN_BRANCH) && git pull origin $(MAIN_BRANCH)
 
 # 7. 同时拉取主子仓库 main 分支并更新
 sync:
-	@echo ">>> 正在同步主仓库 main..."
+	@echo ">>> [1/2] 正在同步主仓库至 $(MAIN_BRANCH)..."
 	@git checkout $(MAIN_BRANCH)
 	@git pull origin $(MAIN_BRANCH)
-	@echo ">>> 正在递归更新子模块..."
-	@git submodule foreach 'git checkout $(MAIN_BRANCH) && git pull origin $(MAIN_BRANCH)'
-	@echo ">>> 状态同步完成。"
+	
+	@echo ">>> [2/2] 正在确保所有子模块同步并切换至 $(MAIN_BRANCH)..."
+	@# 1. 先初始化并更新指针内容
+	@git submodule update --init --recursive
+	@# 2. 强制每个子模块切换到 main 并对齐远端
+	@git submodule foreach 'git checkout $(MAIN_BRANCH) && git fetch origin $(MAIN_BRANCH) && git reset --hard origin/$(MAIN_BRANCH)'
+	
+	@echo ">>> 同步完成！主仓库与所有子模块均已回到 $(MAIN_BRANCH) 并对齐远端。"
+	@git status
