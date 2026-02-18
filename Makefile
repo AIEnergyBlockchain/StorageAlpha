@@ -118,7 +118,7 @@ sup:
 		$(MAKE) up msg="chore: sync submodule - $(msg)"; \
 	fi
 
-# 5. 强制分支版：必须在非 main 分支才能提交，完成后强制回到 main
+# 5. 分支版：必须在非 main 且主/子模块同名分支才能提交
 fullpr:
 	@if [ -z "$(msg)" ]; then \
 		echo "Error: 必须指定 msg='...' (例如: make fullpr msg='完成演示代码')"; exit 1; \
@@ -133,6 +133,10 @@ fullpr:
 		echo "Error: 严禁在 $(MAIN_BRANCH) 分支直接提交 PR。"; \
 		echo "请先手动切至功能分支 (如: git checkout -b feature/demo)"; exit 1; \
 	fi
+	@if [ "$(CUR_BRANCH)" != "$(CUR_SUB_BRANCH)" ]; then \
+		echo "Error: 主仓库分支($(CUR_BRANCH))与子模块分支($(CUR_SUB_BRANCH))不一致。"; \
+		echo "请先对齐为同名非 main 分支后再执行 fullpr。"; exit 1; \
+	fi
 	
 	@echo ">>> [探测成功] 准备提交分支: $(CUR_BRANCH) | 提交信息: $(msg)"
 	
@@ -143,8 +147,7 @@ fullpr:
 			git commit -m "[Submodule] $(msg)" && \
 			git push origin $(CUR_SUB_BRANCH) && \
 			gh pr create --title "[Submodule] $(msg)" --body "Automated" --base $(MAIN_BRANCH) || echo "PR已存在"; \
-		else echo ">>> 子模块无变更"; fi) && \
-		git checkout $(MAIN_BRANCH) && git pull origin $(MAIN_BRANCH)
+		else echo ">>> 子模块无变更"; fi)
 
 	@# 4. 处理主仓库
 	@git add -A && \
@@ -152,8 +155,13 @@ fullpr:
 			git commit -m "[Main] $(msg)" && \
 			git push origin $(CUR_BRANCH) && \
 			gh pr create --title "[Main] $(msg)" --body "Automated" --base $(MAIN_BRANCH) || echo "PR已存在"; \
-		else echo ">>> 主仓库无变更"; fi) && \
-		git checkout $(MAIN_BRANCH) && git pull origin $(MAIN_BRANCH)
+		else echo ">>> 主仓库无变更"; fi)
+
+	@# 5. 提交完成后仅切回 main（不 pull，等待手动合并 PR 后再拉取）
+	@echo ">>> [收尾] 切回主仓库与子模块到 $(MAIN_BRANCH)（不执行 pull）..."
+	@git checkout $(MAIN_BRANCH)
+	@git submodule foreach 'git checkout $(MAIN_BRANCH)'
+	@echo ">>> 已切回 $(MAIN_BRANCH)；请在手动 merge PR 后再执行 pull/sync。"
 
 # 6. 同时拉取主子仓库 main 分支并更新
 sync:
@@ -162,12 +170,11 @@ sync:
 	@git pull origin $(MAIN_BRANCH)
 	
 	@echo ">>> [2/2] 正在确保所有子模块严格对齐主仓库指针..."
-	@# 关键点：不再让子模块自己 fetch/reset，而是由主仓库驱动
+	@# 关键点：不让子模块自行 checkout/reset 到 origin/main，避免产生 gitlink 漂移
+	@git submodule sync --recursive
 	@git submodule update --init --recursive --force
-	@# 如果需要子模块留在 main 分支名上，再额外执行 checkout
-	@git submodule foreach 'git checkout $(MAIN_BRANCH)'
 	
-	@echo ">>> 同步完成！"
+	@echo ">>> 同步完成！子模块已与主仓库记录的提交对齐。"
 	@git status
 
 # 7. 一键开启新任务：主子模块同步切分支
