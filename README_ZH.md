@@ -275,6 +275,8 @@ npm run frontend:serve
 - API 健康检查可单独执行：`npm run smoke:api`
 - 完整 Python 依赖（含 Prophet）：`npm run setup:python`
 - 使用外置 secrets 的 Fuji 部署：`make deploy-fuji`
+- 仅重部署 Settlement（复用 event/proof/drt）并充值 DRT：`make deploy-fuji-settlement`
+- 仅重部署 Settlement 并刷新执行证据：`make deploy-fuji-settlement-evidence`
 - 仅部署 DRT（Fuji）：`make deploy-fuji-drt`
 - 仅部署 DRT 并生成证据：`make deploy-fuji-drt-evidence`
 - 默认允许前端跨域来源：`http://127.0.0.1:4173,http://localhost:4173`，可用 `DR_CORS_ORIGINS` 覆盖
@@ -685,7 +687,7 @@ sequenceDiagram
 
 当前状态：
 
-- 已于 `2026-02-20` 完成 Fuji 部署。
+- 已于 `2026-02-20` 完成 Fuji 全量部署，并于 `2026-03-06` 完成 Settlement 重部署与 DRT 充值。
 - 证据产物路径：`cache/fuji-deployment-latest.json`（内部 Markdown 证据包归档于 `guide/`）。
 - DRT-only 证据产物路径：`cache/fuji-drt-deployment-latest.json`（内部 Markdown 证据包归档于 `guide/`）。
 
@@ -696,8 +698,12 @@ sequenceDiagram
 | Fuji    | Deployer                 | `0xdC1DE25053196bb72e09db43EE34181D1e65cF0A`                         | -                                                                                                  |
 | Fuji    | EventManager             | `0x388C76A617d67137CCF91A3C9B48c0779502484c`                         | https://testnet.snowtrace.io/address/0x388C76A617d67137CCF91A3C9B48c0779502484c                    |
 | Fuji    | ProofRegistry            | `0x05689d6aa1f83ed4854EA0F84f7f96B48133750D`                         | https://testnet.snowtrace.io/address/0x05689d6aa1f83ed4854EA0F84f7f96B48133750D                    |
-| Fuji    | Settlement               | `0x69512B18109BA25Df3A5cA27d30521EE60b7a787`                         | https://testnet.snowtrace.io/address/0x69512B18109BA25Df3A5cA27d30521EE60b7a787                    |
-| Fuji    | setSettlementContract tx | `0xaffbb344ecfec8601313ec452e857f31346c72c5ba0a1e6b6166315b38a2831f` | https://testnet.snowtrace.io/tx/0xaffbb344ecfec8601313ec452e857f31346c72c5ba0a1e6b6166315b38a2831f |
+| Fuji    | DRT Token                | `0x7c3B54f956D95E7F5756dE7684Cf5D893556E6B2`                         | https://testnet.snowtrace.io/address/0x7c3B54f956D95E7F5756dE7684Cf5D893556E6B2                    |
+| Fuji    | Settlement               | `0xE44371c77fdB3bCE4a52126a1EEcCb7634Cf66cc`                         | https://testnet.snowtrace.io/address/0xE44371c77fdB3bCE4a52126a1EEcCb7634Cf66cc                    |
+| Fuji    | deploySettlement tx      | `0xa6311050ae39e226b27fb6c001a6f10f874a5895221c60c0057ab5604bd44903` | https://testnet.snowtrace.io/tx/0xa6311050ae39e226b27fb6c001a6f10f874a5895221c60c0057ab5604bd44903 |
+| Fuji    | setSettlementContract tx | `0xe5859061b21bb8352835bd114319fb17bb1306555d197e8ee147a7b4a7f99af8` | https://testnet.snowtrace.io/tx/0xe5859061b21bb8352835bd114319fb17bb1306555d197e8ee147a7b4a7f99af8 |
+| Fuji    | fundSettlementDRT tx     | `0xd26079ba14e4defc301bc0a8bfd25613a4d086bba0c9e35e3e27945dc8f2cf69` | https://testnet.snowtrace.io/tx/0xd26079ba14e4defc301bc0a8bfd25613a4d086bba0c9e35e3e27945dc8f2cf69 |
+| Fuji    | Settlement DRT Balance   | `1000000.0`                                                          | -                                                                                                  |
 
 最新 DRT-only 证据索引：
 
@@ -714,11 +720,13 @@ sequenceDiagram
 
 维护步骤：
 
-1. 如需重部署，执行 `npm run deploy:fuji`。
-2. 执行 `npm run evidence:execution` 刷新证据包。
-3. 如需仅部署 DRT，执行 `npm run deploy:fuji:drt`。
-4. 如需仅生成 DRT 证据，执行 `npm run evidence:execution:drt`（或一键 `npm run deploy:fuji:drt:evidence`）。
-5. 保持本表与 `cache/` 自动产物一致；`guide/` 内部文档按需同步。
+1. `npm run deploy:fuji` 会全量重部署 `EventManager + ProofRegistry + DRToken + Settlement` 并设置/充值。
+   可选环境变量：`DRT_INITIAL_SUPPLY`（默认 `1000000`）、`DRT_FUND_SETTLEMENT_UNITS`（默认 `500000`，可设为 `max`）。
+2. 如仅需重部署 Settlement（复用已有 event/proof/drt），执行 `npm run deploy:fuji:settlement`。默认 `DRT_FUND_SETTLEMENT_UNITS=max`（尽可能多充值）。
+3. 执行 `npm run evidence:execution` 刷新执行证据包（或一键 `npm run deploy:fuji:settlement:evidence`）。
+4. 如需仅部署 DRT，执行 `npm run deploy:fuji:drt`。
+5. 如需仅生成 DRT 证据，执行 `npm run evidence:execution:drt`（或一键 `npm run deploy:fuji:drt:evidence`）。
+6. 保持本表与 `cache/` 自动产物一致；`guide/` 内部文档按需同步。
 
 ## 11.2 阶段2 72小时最小可获奖提交包
 

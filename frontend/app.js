@@ -53,6 +53,7 @@ const el = {
   flowProgressBar: document.getElementById('flowProgressBar'),
   heroTitle: document.getElementById('heroTitle'),
   heroSubtitle: document.getElementById('heroSubtitle'),
+  storyLatencyLine: document.getElementById('storyLatencyLine'),
   storyEnergy: document.getElementById('storyEnergy'),
   storyPayout: document.getElementById('storyPayout'),
   storyAudit: document.getElementById('storyAudit'),
@@ -142,6 +143,10 @@ const I18N = {
     'story.totalPayout': 'Total Payout',
     'story.auditConfidence': 'Audit Confidence',
     'story.agentThinking': 'Agent Thinking',
+    'story.latency.idle': 'Delay: waiting for first API call.',
+    'story.latency.running': 'Delay: running {step} | elapsed {elapsed} | API {api}.',
+    'story.latency.breakdown': 'Delay: {step} => API {api} + {summary} = {total}; {pending}.',
+    'story.latency.pendingOnly': 'Delay: waiting confirmations for {count} pending tx.',
     'visual.title': 'Visual Insights',
     'visual.subtitle': 'Charts appear as proof and settlement data arrives.',
     'visual.empty': 'Run proof submission to unlock baseline and payout charts.',
@@ -441,6 +446,10 @@ const I18N = {
     'story.totalPayout': '总结算',
     'story.auditConfidence': '审计可信度',
     'story.agentThinking': 'Agent 思考',
+    'story.latency.idle': '延迟：等待首次 API 调用。',
+    'story.latency.running': '延迟：执行 {step} 中 | 已耗时 {elapsed} | API {api}。',
+    'story.latency.breakdown': '延迟：{step} => API {api} + {summary} = {total}；{pending}。',
+    'story.latency.pendingOnly': '延迟：正在等待 {count} 笔待确认交易。',
     'visual.title': '可视化洞察',
     'visual.subtitle': '随着 proof 与结算数据到达，图表会动态出现。',
     'visual.empty': '提交 proof 后将解锁 baseline 与 payout 图表。',
@@ -1124,6 +1133,21 @@ function decodeError(message) {
       headline: t('error.settleBlocked.headline'),
       hint: t('error.settleBlocked.hint'),
       next: t('error.settleBlocked.next'),
+    };
+  }
+
+  if (
+    normalized.includes('close_tx_pending_confirmation') ||
+    normalized.includes('event_not_closed_onchain') ||
+    normalized.includes('close transaction still pending confirmation') ||
+    normalized.includes('settle_tx_pending_confirmation') ||
+    normalized.includes('settlement transaction still pending confirmation')
+  ) {
+    return {
+      level: 'warn',
+      headline: t('error.pendingChain.headline'),
+      hint: t('error.pendingChain.hint'),
+      next: t('error.pendingChain.next'),
     };
   }
 
@@ -1919,6 +1943,7 @@ function renderStoryHero(ui) {
     if (!auditRequested) el.storyAudit.textContent = displayStatus('pending');
     else el.storyAudit.textContent = auditMatch ? t('status.pass') : t('status.mismatch');
   }
+  if (el.storyLatencyLine) el.storyLatencyLine.textContent = buildStoryLatencyLine();
 }
 
 function setVisualBarWidth(node, ratio) {
@@ -2183,6 +2208,23 @@ function plusMinutes(mins) {
   return d.toISOString().replace('.000', '');
 }
 
+function isClosePendingConfirmationError(err) {
+  const text = String(err?.message || err || '').toLowerCase();
+  return (
+    text.includes('close_tx_pending_confirmation') ||
+    text.includes('event_not_closed_onchain') ||
+    text.includes('close transaction still pending confirmation')
+  );
+}
+
+function isSettlePendingConfirmationError(err) {
+  const text = String(err?.message || err || '').toLowerCase();
+  return (
+    text.includes('settle_tx_pending_confirmation') ||
+    text.includes('settlement transaction still pending confirmation')
+  );
+}
+
 async function callApi(path, method, body, apiKey, actorId = 'ui-user', options = {}) {
   const start = performance.now();
   const { baseUrl } = cfg();
@@ -2350,6 +2392,44 @@ function buildTimingNextLine(lastStep, txPipeline) {
     tx: txPart,
     pendingPart,
   });
+}
+
+function buildStoryLatencyLine() {
+  const txPipeline = collectTxPipeline();
+  if (state.busy && state.timing.current) {
+    const current = state.timing.current;
+    return t('story.latency.running', {
+      step: formatStepForSummary(current.stepId),
+      elapsed: formatMs(performance.now() - current.startedAt),
+      api: formatMs(current.apiMs),
+    });
+  }
+
+  if (state.timing.last) {
+    const lastStep = state.timing.last;
+    const summaryPart = lastStep.deferredSummary
+      ? t('diag.delayBreakdown.summaryDeferred')
+      : t('diag.delayBreakdown.summary', { summary: formatMs(lastStep.summaryMs) });
+    const pendingPart =
+      txPipeline.submitted > 0
+        ? t('diag.delayBreakdown.pending', { count: txPipeline.submitted })
+        : txPipeline.failed > 0
+          ? t('diag.delayBreakdown.failed', { count: txPipeline.failed })
+          : t('diag.delayBreakdown.nonePending');
+    return t('story.latency.breakdown', {
+      step: formatStepForSummary(lastStep.stepId),
+      api: formatMs(lastStep.apiMs),
+      summary: summaryPart,
+      total: formatMs(lastStep.totalMs),
+      pending: pendingPart,
+    });
+  }
+
+  if (txPipeline.submitted > 0) {
+    return t('story.latency.pendingOnly', { count: txPipeline.submitted });
+  }
+
+  return t('story.latency.idle');
 }
 
 function buildDiagnosticsView(ui) {
@@ -2585,35 +2665,101 @@ async function getAudit(options = {}) {
 
 async function runFullFlow() {
   appendLog('run', t('log.runStart', { eventId: cfg().eventId }));
-  await createEvent({ deferSummary: true });
-  await waitForPendingConfirmationsBefore('proofs');
-  const requiredSites = requiredProofSites();
-  for (const siteId of requiredSites) {
-    const scenario = defaultProofScenario(siteId);
-    await submitProof(siteId, scenario.baseline, scenario.actual, { deferSummary: true });
+  const maxLoops = 18;
+  for (let loop = 0; loop < maxLoops; loop += 1) {
+    const ui = deriveUiState();
+    if (ui.currentStep === 'completed') {
+      appendLog('run', t('log.runDone'));
+      return;
+    }
+
+    if (ui.currentStep === 'create') {
+      await createEvent({ deferSummary: true });
+      continue;
+    }
+
+    if (ui.currentStep === 'proofs') {
+      const requiredSites = requiredProofSites();
+      let submittedOne = false;
+      for (const siteId of requiredSites) {
+        if (!state.proofs[siteId]) {
+          const scenario = defaultProofScenario(siteId);
+          await submitProof(siteId, scenario.baseline, scenario.actual, {
+            deferSummary: true,
+          });
+          submittedOne = true;
+          break;
+        }
+      }
+      if (submittedOne) continue;
+      await waitForPendingConfirmationsBefore('proofs');
+      continue;
+    }
+
+    if (ui.currentStep === 'close') {
+      await closeEvent({ deferSummary: true });
+      continue;
+    }
+
+    if (ui.currentStep === 'settle') {
+      await waitForPendingConfirmationsBefore('settle');
+      try {
+        await settleEvent({ deferSummary: true });
+      } catch (err) {
+        if (!isClosePendingConfirmationError(err)) throw err;
+        appendLog('run', 'settle waiting for close confirmation; retrying...');
+        await sleep(PENDING_TX_POLL_MS);
+        await refreshJudgeSummary();
+      }
+      continue;
+    }
+
+    if (ui.currentStep === 'claim') {
+      await waitForPendingConfirmationsBefore('claim');
+      try {
+        await claimA({ deferSummary: true });
+      } catch (err) {
+        if (!isSettlePendingConfirmationError(err)) throw err;
+        appendLog('run', 'claim waiting for settlement confirmation; retrying...');
+        await sleep(PENDING_TX_POLL_MS);
+        await refreshJudgeSummary();
+      }
+      continue;
+    }
+
+    if (ui.currentStep === 'audit') {
+      await waitForPendingConfirmationsBefore('audit');
+      await getAudit();
+      continue;
+    }
   }
-  await closeEvent({ deferSummary: true });
-  await waitForPendingConfirmationsBefore('settle');
-  await settleEvent({ deferSummary: true });
-  await waitForPendingConfirmationsBefore('claim');
-  await claimA({ deferSummary: true });
-  await waitForPendingConfirmationsBefore('audit');
-  await getAudit();
-  appendLog('run', t('log.runDone'));
+
+  throw new Error('run full flow exceeded max retries');
+}
+
+function preferredRetryStep() {
+  for (const step of FLOW_STEPS) {
+    if (state.stepErrors[step.id]) return step.id;
+  }
+  return endpointToStep(state.lastError);
 }
 
 async function runNextStep() {
   const ui = deriveUiState();
+  const targetStep = preferredRetryStep() || ui.currentStep;
 
-  if (['proofs', 'settle', 'claim', 'audit'].includes(ui.currentStep)) {
-    await waitForPendingConfirmationsBefore(ui.currentStep);
+  if (['proofs', 'settle', 'claim', 'audit'].includes(targetStep)) {
+    await waitForPendingConfirmationsBefore(targetStep);
   }
 
-  if (ui.currentStep === 'create') {
+  if (targetStep === 'completed') {
+    return;
+  }
+  if (targetStep === 'create') {
     await createEvent();
     return;
   }
-  if (ui.currentStep === 'proofs') {
+  if (targetStep === 'proofs') {
     for (const siteId of ui.requiredSites) {
       if (!state.proofs[siteId]) {
         const scenario = defaultProofScenario(siteId);
@@ -2634,19 +2780,35 @@ async function runNextStep() {
     }
     return;
   }
-  if (ui.currentStep === 'close') {
+  if (targetStep === 'close') {
     await closeEvent();
     return;
   }
-  if (ui.currentStep === 'settle') {
-    await settleEvent();
+  if (targetStep === 'settle') {
+    try {
+      await settleEvent();
+    } catch (err) {
+      if (!isClosePendingConfirmationError(err)) throw err;
+      appendLog('run', 'settle waiting for close confirmation; retrying...');
+      await sleep(PENDING_TX_POLL_MS);
+      await refreshJudgeSummary();
+      await settleEvent();
+    }
     return;
   }
-  if (ui.currentStep === 'claim') {
-    await claimA();
+  if (targetStep === 'claim') {
+    try {
+      await claimA();
+    } catch (err) {
+      if (!isSettlePendingConfirmationError(err)) throw err;
+      appendLog('run', 'claim waiting for settlement confirmation; retrying...');
+      await sleep(PENDING_TX_POLL_MS);
+      await refreshJudgeSummary();
+      await claimA();
+    }
     return;
   }
-  if (ui.currentStep === 'audit') {
+  if (targetStep === 'audit') {
     await getAudit();
   }
 }
@@ -2658,6 +2820,21 @@ function triggerButton(id) {
 }
 
 function handleActionError(err, fallbackStep) {
+  if (isClosePendingConfirmationError(err) || isSettlePendingConfirmationError(err)) {
+    const activeTiming = state.timing.current;
+    if (activeTiming) {
+      finishStepTiming({
+        txState: 'submitted',
+        deferredSummary: true,
+      });
+    }
+    if (isClosePendingConfirmationError(err)) delete state.stepErrors.settle;
+    if (isSettlePendingConfirmationError(err)) delete state.stepErrors.claim;
+    clearErrorState();
+    appendLog('run', 'deferred: waiting on prior on-chain confirmation');
+    return;
+  }
+
   const message = err.message || String(err);
   const activeTiming = state.timing.current;
   if (activeTiming) {
@@ -2788,7 +2965,7 @@ bindAction('btnSettle', settleEvent, 'settle');
 bindAction('btnClaimA', claimA, 'claim');
 bindAction('btnRunAll', runFullFlow, 'create');
 bindAction('btnRunAllHero', runFullFlow, 'create');
-bindAction('btnNextStep', runNextStep, 'create');
+bindAction('btnNextStep', runNextStep);
 bindAction('btnGetEvent', getEvent, 'create');
 bindAction('btnGetRecords', getRecords, 'settle');
 bindAction('btnAudit', getAudit, 'audit');
