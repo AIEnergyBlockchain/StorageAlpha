@@ -279,6 +279,8 @@ Notes:
 - API smoke script: `npm run smoke:api`
 - Full Python dependencies (including Prophet): `npm run setup:python`
 - Fuji deploy with external secrets: `make deploy-fuji`
+- Settlement-only redeploy (reuse event/proof/drt and top up DRT): `make deploy-fuji-settlement`
+- Settlement-only redeploy + execution evidence: `make deploy-fuji-settlement-evidence`
 - DRT-only Fuji deploy: `make deploy-fuji-drt`
 - DRT-only deploy + evidence: `make deploy-fuji-drt-evidence`
 - For live-demo mode confirmation: `curl http://127.0.0.1:8000/system/chain-mode` (includes `tx_confirm_mode`)
@@ -681,7 +683,7 @@ Keyboard shortcuts:
 
 Status:
 
-- Fuji deployment completed on `2026-02-20`.
+- Fuji full deployment completed on `2026-02-20`, then Settlement was redeployed and re-funded on `2026-03-06`.
 - Evidence source: `cache/fuji-deployment-latest.json` (internal markdown bundle archived in `guide/`).
 - DRT-only evidence source: `cache/fuji-drt-deployment-latest.json` (internal markdown bundle archived in `guide/`).
 
@@ -692,8 +694,12 @@ Current record:
 | Fuji    | Deployer                 | `0xdC1DE25053196bb72e09db43EE34181D1e65cF0A`                         | -                                                                                                  |
 | Fuji    | EventManager             | `0x388C76A617d67137CCF91A3C9B48c0779502484c`                         | https://testnet.snowtrace.io/address/0x388C76A617d67137CCF91A3C9B48c0779502484c                    |
 | Fuji    | ProofRegistry            | `0x05689d6aa1f83ed4854EA0F84f7f96B48133750D`                         | https://testnet.snowtrace.io/address/0x05689d6aa1f83ed4854EA0F84f7f96B48133750D                    |
-| Fuji    | Settlement               | `0x69512B18109BA25Df3A5cA27d30521EE60b7a787`                         | https://testnet.snowtrace.io/address/0x69512B18109BA25Df3A5cA27d30521EE60b7a787                    |
-| Fuji    | setSettlementContract tx | `0xaffbb344ecfec8601313ec452e857f31346c72c5ba0a1e6b6166315b38a2831f` | https://testnet.snowtrace.io/tx/0xaffbb344ecfec8601313ec452e857f31346c72c5ba0a1e6b6166315b38a2831f |
+| Fuji    | DRT Token                | `0x7c3B54f956D95E7F5756dE7684Cf5D893556E6B2`                         | https://testnet.snowtrace.io/address/0x7c3B54f956D95E7F5756dE7684Cf5D893556E6B2                    |
+| Fuji    | Settlement               | `0xE44371c77fdB3bCE4a52126a1EEcCb7634Cf66cc`                         | https://testnet.snowtrace.io/address/0xE44371c77fdB3bCE4a52126a1EEcCb7634Cf66cc                    |
+| Fuji    | deploySettlement tx      | `0xa6311050ae39e226b27fb6c001a6f10f874a5895221c60c0057ab5604bd44903` | https://testnet.snowtrace.io/tx/0xa6311050ae39e226b27fb6c001a6f10f874a5895221c60c0057ab5604bd44903 |
+| Fuji    | setSettlementContract tx | `0xe5859061b21bb8352835bd114319fb17bb1306555d197e8ee147a7b4a7f99af8` | https://testnet.snowtrace.io/tx/0xe5859061b21bb8352835bd114319fb17bb1306555d197e8ee147a7b4a7f99af8 |
+| Fuji    | fundSettlementDRT tx     | `0xd26079ba14e4defc301bc0a8bfd25613a4d086bba0c9e35e3e27945dc8f2cf69` | https://testnet.snowtrace.io/tx/0xd26079ba14e4defc301bc0a8bfd25613a4d086bba0c9e35e3e27945dc8f2cf69 |
+| Fuji    | Settlement DRT Balance   | `1000000.0`                                                          | -                                                                                                  |
 
 Latest DRT-only evidence index:
 
@@ -710,11 +716,13 @@ Latest DRT-only evidence index:
 
 Maintenance flow:
 
-1. Re-deploy when needed with `npm run deploy:fuji`.
-2. Rebuild evidence bundle with `npm run evidence:execution`.
-3. For DRT-only deploy, run `npm run deploy:fuji:drt`.
-4. For DRT-only evidence, run `npm run evidence:execution:drt` (or one-shot `npm run deploy:fuji:drt:evidence`).
-5. Keep this table in sync with generated cache artifacts; update internal docs in `guide/` only as needed.
+1. `npm run deploy:fuji` performs a full redeploy of `EventManager + ProofRegistry + DRToken + Settlement`, then sets/funds settlement.
+   Optional env vars: `DRT_INITIAL_SUPPLY` (default `1000000`), `DRT_FUND_SETTLEMENT_UNITS` (default `500000`, supports `max`).
+2. For settlement-only redeploy (reuse existing event/proof/drt), run `npm run deploy:fuji:settlement`. Default funding mode is `DRT_FUND_SETTLEMENT_UNITS=max`.
+3. Rebuild execution evidence with `npm run evidence:execution` (or one-shot `npm run deploy:fuji:settlement:evidence`).
+4. For DRT-only deploy, run `npm run deploy:fuji:drt`.
+5. For DRT-only evidence, run `npm run evidence:execution:drt` (or one-shot `npm run deploy:fuji:drt:evidence`).
+6. Keep this table in sync with generated cache artifacts; update internal docs in `guide/` only as needed.
 
 ## 11.2 Stage-2 72-Hour Submission Kit (Minimum Winning Scope)
 

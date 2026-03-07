@@ -227,6 +227,11 @@ h1 {
   color: var(--text-muted);
 }
 
+.story-latency-line {
+  margin-top: 8px;
+  color: rgba(142, 163, 199, 0.92);
+}
+
 .panel {
   position: relative;
   overflow: hidden;
@@ -1293,13 +1298,16 @@ body[data-view="story"] #technicalEvidence {
 
 body[data-view="story"] .judge-view .section-head-main p,
 body[data-view="story"] .judge-view .evidence-grid,
-body[data-view="story"] .kpi-hint,
-body[data-view="story"] .story-kpi.story-insight {
+body[data-view="story"] .kpi-hint {
   display: none;
 }
 
 body[data-view="story"] .kpi-secondary,
 body[data-view="story"] .card-diagnostics {
+  display: none;
+}
+
+body[data-view="story"] #kpiCardLatency {
   display: none;
 }
 

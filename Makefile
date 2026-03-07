@@ -17,7 +17,7 @@ RUN_WITH_SECRETS = DR_SECRETS_FILE="$(SECRETS_FILE)" bash scripts/run_with_secre
 
 .PHONY: help \
 	up newup ship sup fullpr-sub fullpr-main sync sync-sub-main new branch-check \
-	secrets-init secrets-check api-run demo-run smoke-api-secrets deploy-fuji deploy-fuji-drt deploy-fuji-drt-evidence \
+	secrets-init secrets-check api-run demo-run smoke-api-secrets deploy-fuji deploy-fuji-settlement deploy-fuji-settlement-evidence deploy-fuji-drt deploy-fuji-drt-evidence \
 	evidence-execution evidence-execution-drt evidence-judge evidence-judge-drt
 
 # 默认命令：输入 make 就会显示帮助
@@ -39,6 +39,8 @@ help:
 	@echo "make demo-run                   # 使用外置 secrets 执行闭环演示"
 	@echo "make smoke-api-secrets          # 使用外置 secrets 执行 API 冒烟"
 	@echo "make deploy-fuji                # 使用外置 secrets 部署 Fuji"
+	@echo "make deploy-fuji-settlement     # 仅重部署 Settlement 并充值 DRT（默认尽可能多）"
+	@echo "make deploy-fuji-settlement-evidence # 仅重部署 Settlement 并生成执行证据包"
 	@echo "make deploy-fuji-drt            # 仅部署 DRT 合约（Fuji）"
 	@echo "make deploy-fuji-drt-evidence   # 仅部署 DRT 并生成 DRT 证据包"
 	@echo "make evidence-execution         # 生成执行证据包（Markdown）"
@@ -79,6 +81,10 @@ smoke-api-secrets:
 deploy-fuji:
 	@$(RUN_WITH_SECRETS) ./node_modules/.bin/hardhat run scripts/deploy_fuji.ts --network fuji
 
+# 使用外置 secrets 仅重部署 Settlement（复用 event/proof/drt）并充值 DRT
+deploy-fuji-settlement:
+	@$(RUN_WITH_SECRETS) ./node_modules/.bin/hardhat run scripts/redeploy_settlement_fuji.ts --network fuji
+
 # 使用外置 secrets 仅部署 DRT（Fuji）
 deploy-fuji-drt:
 	@$(RUN_WITH_SECRETS) ./node_modules/.bin/hardhat run scripts/deploy_drt_fuji.ts --network fuji
@@ -99,6 +105,11 @@ evidence-judge-drt: evidence-execution-drt
 deploy-fuji-drt-evidence:
 	@$(MAKE) deploy-fuji-drt
 	@$(MAKE) evidence-execution-drt
+
+# 一键：仅重部署 Settlement 并生成执行证据包
+deploy-fuji-settlement-evidence:
+	@$(MAKE) deploy-fuji-settlement
+	@$(MAKE) evidence-execution
 
 # 1. 基础提交
 up:

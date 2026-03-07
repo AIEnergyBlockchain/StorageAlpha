@@ -70,6 +70,7 @@
           <p class="eyebrow" data-i18n="story.command">Mission Command</p>
           <h2 id="heroTitle">Next Step: Create Event</h2>
           <p id="heroSubtitle" class="subtitle">Launch a demand response event to initialize the settlement loop.</p>
+          <p id="storyLatencyLine" class="hint story-latency-line">Delay: waiting for first API call.</p>
           <div class="hero-actions">
             <button id="btnNextStep" class="btn btn-strong btn-main-cta" data-i18n="action.next">Execute Next Step</button>
             <button id="btnRunAllHero" class="btn" data-i18n="action.runAll">Auto Run Full Flow</button>
@@ -292,12 +293,12 @@
         </div>
 
         <div class="kpi-grid">
-          <article id="kpiCardStatus" class="kpi-card" data-state="pending">
+          <article id="kpiCardStatus" class="kpi-card kpi-secondary" data-state="pending">
             <p class="kpi-label" data-i18n="kpi.status">Status</p>
             <p id="kpiStatus" class="kpi-value">pending</p>
             <p id="kpiStatusHint" class="kpi-hint">Waiting for event creation.</p>
           </article>
-          <article id="kpiCardCoverage" class="kpi-card kpi-secondary" data-state="pending">
+          <article id="kpiCardCoverage" class="kpi-card" data-state="pending">
             <p class="kpi-label" data-i18n="kpi.coverage">Proof Coverage</p>
             <p id="kpiCoverage" class="kpi-value">0 / 2 sites</p>
             <p id="kpiCoverageHint" class="kpi-hint">No participant proofs submitted yet.</p>
@@ -307,7 +308,7 @@
             <p id="kpiPayout" class="kpi-value">0 DRT</p>
             <p id="kpiPayoutHint" class="kpi-hint">Calculated after settlement.</p>
           </article>
-          <article id="kpiCardClaim" class="kpi-card" data-state="pending">
+          <article id="kpiCardClaim" class="kpi-card kpi-secondary" data-state="pending">
             <p class="kpi-label" data-i18n="kpi.claimA">Claim (site-a)</p>
             <p id="kpiClaim" class="kpi-value">pending</p>
             <p id="kpiClaimHint" class="kpi-hint">Awaiting claim action.</p>
