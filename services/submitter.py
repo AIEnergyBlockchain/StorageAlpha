@@ -10,6 +10,7 @@ import json
 import os
 import sqlite3
 import subprocess
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -411,6 +412,128 @@ class SubmitterService:
                 counts["submitted"] += 1
         return counts
 
+    def _ensure_close_confirmed_before_settle(self, event_id: str) -> None:
+        if not self.live_chain or self.tx_confirm_mode != "hybrid":
+            return
+
+        timeout_seconds = _int_env("DR_SETTLE_CLOSE_WAIT_SECONDS", default=6, minimum=1)
+        poll_seconds = _float_env(
+            "DR_SETTLE_CLOSE_POLL_SECONDS", default=0.8, minimum=0.2
+        )
+        started = time.monotonic()
+
+        while True:
+            self._reconcile_pending_txs(event_id)
+            row = self.conn.execute(
+                """
+                SELECT close_tx_hash,close_tx_state,close_tx_error
+                FROM events
+                WHERE event_id = ?
+                """,
+                (event_id,),
+            ).fetchone()
+            if row is None:
+                raise ServiceError(404, "EVENT_NOT_FOUND", "event not found")
+
+            close_tx_hash = row["close_tx_hash"]
+            close_tx_state = _normalize_tx_state(row["close_tx_state"])
+            close_tx_error = row["close_tx_error"]
+
+            if close_tx_state == "confirmed":
+                return
+            if close_tx_state == "failed":
+                raise ServiceError(
+                    409,
+                    "CLOSE_TX_FAILED",
+                    "close transaction failed on-chain; retry close before settlement",
+                    retryable=True,
+                    details={
+                        "event_id": event_id,
+                        "close_tx_hash": close_tx_hash,
+                        "close_tx_error": close_tx_error,
+                    },
+                )
+            if not close_tx_hash:
+                raise ServiceError(
+                    409, "EVENT_NOT_CLOSED", "event must be closed before settlement"
+                )
+
+            elapsed = time.monotonic() - started
+            if elapsed >= timeout_seconds:
+                raise ServiceError(
+                    409,
+                    "CLOSE_TX_PENDING_CONFIRMATION",
+                    f"close transaction still pending confirmation after {timeout_seconds}s",
+                    retryable=True,
+                    details={
+                        "event_id": event_id,
+                        "close_tx_hash": close_tx_hash,
+                        "close_tx_state": close_tx_state,
+                    },
+                )
+
+            time.sleep(poll_seconds)
+
+    def _ensure_create_confirmed_before_proof(self, event_id: str) -> None:
+        if not self.live_chain or self.tx_confirm_mode != "hybrid":
+            return
+
+        timeout_seconds = _int_env("DR_PROOF_CREATE_WAIT_SECONDS", default=6, minimum=1)
+        poll_seconds = _float_env(
+            "DR_PROOF_CREATE_POLL_SECONDS", default=0.8, minimum=0.2
+        )
+        started = time.monotonic()
+
+        while True:
+            self._reconcile_pending_txs(event_id)
+            row = self.conn.execute(
+                """
+                SELECT tx_hash,tx_state,tx_error
+                FROM events
+                WHERE event_id = ?
+                """,
+                (event_id,),
+            ).fetchone()
+            if row is None:
+                raise ServiceError(404, "EVENT_NOT_FOUND", "event not found")
+
+            create_tx_hash = row["tx_hash"]
+            create_tx_state = _normalize_tx_state(row["tx_state"])
+            create_tx_error = row["tx_error"]
+
+            if create_tx_state == "confirmed":
+                return
+            if create_tx_state == "failed":
+                raise ServiceError(
+                    409,
+                    "CREATE_TX_FAILED",
+                    "create transaction failed on-chain; recreate event before proof submission",
+                    retryable=True,
+                    details={
+                        "event_id": event_id,
+                        "create_tx_hash": create_tx_hash,
+                        "create_tx_error": create_tx_error,
+                    },
+                )
+            if not create_tx_hash:
+                return
+
+            elapsed = time.monotonic() - started
+            if elapsed >= timeout_seconds:
+                raise ServiceError(
+                    409,
+                    "CREATE_TX_PENDING_CONFIRMATION",
+                    "create transaction is submitted but not confirmed yet",
+                    retryable=True,
+                    details={
+                        "event_id": event_id,
+                        "create_tx_hash": create_tx_hash,
+                        "create_tx_state": create_tx_state,
+                    },
+                )
+
+            time.sleep(poll_seconds)
+
     def create_event(self, req: EventCreateRequest) -> EventDTO:
         start_time = _to_rfc3339(req.start_time)
         end_time = _to_rfc3339(req.end_time)
@@ -589,6 +712,8 @@ class SubmitterService:
         if event["status"] != "active":
             raise ServiceError(409, "EVENT_NOT_ACTIVE", "event must be active")
 
+        self._ensure_create_confirmed_before_proof(req.event_id)
+
         payload_json, computed_hash, reduction_kwh = build_proof_artifacts(
             event_id=req.event_id,
             site_id=req.site_id,
@@ -673,7 +798,7 @@ class SubmitterService:
     def settle_event(self, event_id: str, site_ids: list[str]) -> list[SettlementDTO]:
         event = self.conn.execute(
             """
-            SELECT event_id,target_kw,reward_rate,penalty_rate,status
+            SELECT event_id,target_kw,reward_rate,penalty_rate,status,close_tx_hash,close_tx_state,close_tx_fee_wei
             FROM events WHERE event_id = ?
             """,
             (event_id,),
@@ -688,6 +813,8 @@ class SubmitterService:
             raise ServiceError(
                 409, "EVENT_NOT_CLOSED", "event must be closed before settlement"
             )
+
+        self._ensure_close_confirmed_before_settle(event_id)
 
         if not site_ids:
             rows = self.conn.execute(
@@ -742,13 +869,30 @@ class SubmitterService:
             )
             settlement_rows.append((site_id, payout))
 
-        tx_result = self._chain_tx(
-            "settle_event",
-            {
-                "event_id": event_id,
-                "site_ids": site_ids,
-            },
-        )
+        try:
+            tx_result = self._chain_tx(
+                "settle_event",
+                {
+                    "event_id": event_id,
+                    "site_ids": site_ids,
+                },
+            )
+        except ServiceError as exc:
+            message = str(exc.message or "").lower()
+            if (
+                self.live_chain
+                and self.tx_confirm_mode == "hybrid"
+                and "must be closed" in message
+            ):
+                self._reconcile_pending_txs(event_id)
+                raise ServiceError(
+                    409,
+                    "EVENT_NOT_CLOSED_ONCHAIN",
+                    "close transaction has not finalized on-chain yet; retry settlement shortly",
+                    retryable=True,
+                    details={"event_id": event_id},
+                ) from exc
+            raise
         tx_hash = tx_result["tx_hash"]
 
         created: list[SettlementDTO] = []
@@ -809,6 +953,9 @@ class SubmitterService:
         return created
 
     def claim_reward(self, event_id: str, site_id: str, actor_id: str) -> SettlementDTO:
+        if self.live_chain and self.tx_confirm_mode == "hybrid":
+            self._reconcile_pending_txs(event_id)
+
         record = self.conn.execute(
             """
             SELECT
@@ -823,6 +970,35 @@ class SubmitterService:
             raise ServiceError(
                 404, "SETTLEMENT_NOT_FOUND", "settlement record not found"
             )
+
+        if self.live_chain and self.tx_confirm_mode == "hybrid":
+            settle_tx_state = _normalize_tx_state(record["tx_state"])
+            if settle_tx_state == "submitted":
+                raise ServiceError(
+                    409,
+                    "SETTLE_TX_PENDING_CONFIRMATION",
+                    "settlement transaction still pending confirmation",
+                    retryable=True,
+                    details={
+                        "event_id": event_id,
+                        "site_id": site_id,
+                        "settle_tx_hash": record["tx_hash"],
+                    },
+                )
+            if settle_tx_state == "failed":
+                raise ServiceError(
+                    409,
+                    "SETTLE_TX_FAILED",
+                    "settlement transaction failed on-chain; rerun settlement before claim",
+                    retryable=True,
+                    details={
+                        "event_id": event_id,
+                        "site_id": site_id,
+                        "settle_tx_hash": record["tx_hash"],
+                        "settle_tx_error": record["tx_error"],
+                    },
+                )
+
         if record["status"] != "settled":
             raise ServiceError(409, "NOT_CLAIMABLE", "settlement is not claimable")
 
@@ -1136,6 +1312,28 @@ def _to_rfc3339(value: datetime) -> str:
     else:
         value = value.astimezone(timezone.utc)
     return value.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _int_env(name: str, default: int, minimum: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return max(minimum, value)
+
+
+def _float_env(name: str, default: float, minimum: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return max(minimum, value)
 
 
 def _tx_hash() -> str:

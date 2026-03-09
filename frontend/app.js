@@ -6,7 +6,7 @@ const FLOW_STEPS = [
   { id: 'claim', label: 'Claim' },
   { id: 'audit', label: 'Audit' },
 ];
-const VIEW_MODES = ['story', 'ops', 'engineering'];
+const VIEW_MODES = ['story', 'engineering'];
 const DEFAULT_REQUIRED_PROOF_SITES = ['site-a', 'site-b'];
 
 const tabs = Array.from(document.querySelectorAll('.tab'));
@@ -20,11 +20,12 @@ const MAX_LOG_ENTRIES = 320;
 const MAX_STEP_TIMING_ENTRIES = 24;
 const PENDING_TX_WAIT_TIMEOUT_MS = 120000;
 const PENDING_TX_POLL_MS = 1200;
+const HERO_TITLE_MAX_CHARS = 55;
+const HERO_SUBTITLE_MAX_CHARS = 90;
 
 const el = {
   log: document.getElementById('log'),
   btnViewStory: document.getElementById('btnViewStory'),
-  btnViewOps: document.getElementById('btnViewOps'),
   btnViewEngineering: document.getElementById('btnViewEngineering'),
   btnLangEn: document.getElementById('btnLangEn'),
   btnLangZh: document.getElementById('btnLangZh'),
@@ -32,11 +33,15 @@ const el = {
   builderPanel: document.getElementById('builderPanel'),
   btnTheme: document.getElementById('btnTheme'),
   btnCameraMode: document.getElementById('btnCameraMode'),
-  btnJudgeMode: document.getElementById('btnJudgeMode'),
   btnNextStep: document.getElementById('btnNextStep'),
   btnRunAllHero: document.getElementById('btnRunAllHero'),
   btnExportSnapshot: document.getElementById('btnExportSnapshot'),
+  btnStoryTechEvidence: document.getElementById('btnStoryTechEvidence'),
+  btnStorySnapshot: document.getElementById('btnStorySnapshot'),
   snapshotFeedback: document.getElementById('snapshotFeedback'),
+  storyEvidenceHint: document.getElementById('storyEvidenceHint'),
+  storyLatestTxLine: document.getElementById('storyLatestTxLine'),
+  storyLatestTxLink: document.getElementById('storyLatestTxLink'),
   eventIdInput: document.getElementById('eventId'),
   baseUrl: document.getElementById('baseUrl'),
   operatorKey: document.getElementById('operatorKey'),
@@ -53,6 +58,7 @@ const el = {
   flowProgressBar: document.getElementById('flowProgressBar'),
   heroTitle: document.getElementById('heroTitle'),
   heroSubtitle: document.getElementById('heroSubtitle'),
+  storyLatencyLine: document.getElementById('storyLatencyLine'),
   storyEnergy: document.getElementById('storyEnergy'),
   storyPayout: document.getElementById('storyPayout'),
   storyAudit: document.getElementById('storyAudit'),
@@ -119,7 +125,7 @@ const el = {
 const I18N = {
   en: {
     'page.title': 'DR Agent Mission Cockpit',
-    'hero.eyebrow': 'Avalanche Build Games | Judge Demo',
+    'hero.eyebrow': 'Protocol Demo | Execution Review',
     'hero.title': 'DR Agent Mission Cockpit',
     'hero.subtitle': 'Verifiable automated settlement for demand response events.',
     'mission.event': 'Event',
@@ -130,11 +136,9 @@ const I18N = {
     'mission.flowProgress': 'Flow Progress',
     'mode.experience': 'Experience mode',
     'mode.story': 'Story Mode',
-    'mode.ops': 'Ops Mode',
     'mode.engineering': 'Engineering Mode',
-    'mode.hint.story': 'Story Mode focuses on one next action and business impact.',
-    'mode.hint.ops': 'Ops Mode emphasizes flow status, guardrails, and execution detail.',
-    'mode.hint.engineering': 'Engineering Mode exposes raw evidence and diagnostic traces.',
+    'mode.hint.story': 'Story Mode is the judge-facing single-screen narrative.',
+    'mode.hint.engineering': 'Engineering Mode exposes flow detail, diagnostics, and raw evidence.',
     'lang.en': 'EN',
     'lang.zh': '中文',
     'story.command': 'Mission Command',
@@ -142,6 +146,14 @@ const I18N = {
     'story.totalPayout': 'Total Payout',
     'story.auditConfidence': 'Audit Confidence',
     'story.agentThinking': 'Agent Thinking',
+    'story.viewTxEvidence': 'View Tx Evidence',
+    'story.evidenceHint': 'Open engineering evidence or copy a review snapshot.',
+    'story.latestTxLabel': 'Latest Tx',
+    'story.latestTxNone': 'No transaction yet',
+    'story.latency.idle': 'Delay: waiting for first API call.',
+    'story.latency.running': 'Delay: running {step} | elapsed {elapsed} | API {api}.',
+    'story.latency.breakdown': 'Delay: {step} => API {api} + {summary} = {total}; {pending}.',
+    'story.latency.pendingOnly': 'Delay: waiting confirmations for {count} pending tx.',
     'visual.title': 'Visual Insights',
     'visual.subtitle': 'Charts appear as proof and settlement data arrives.',
     'visual.empty': 'Run proof submission to unlock baseline and payout charts.',
@@ -175,8 +187,8 @@ const I18N = {
     'flow.claimBtn': '6. Claim A',
     'flow.runAllBtn': 'Run Full Flow',
     'flow.pathHint': 'Primary story path: Create -> Proofs -> Close -> Settle -> Claim -> Audit.',
-    'judge.title': 'Judge View',
-    'judge.subtitle': 'Three-layer readout: mission context, KPI outcomes, technical evidence.',
+    'judge.title': 'Execution View',
+    'judge.subtitle': 'Three-layer readout: mission context, KPI outcomes, execution evidence.',
     'step.create': 'Create',
     'step.proofs': 'Proofs',
     'step.close': 'Close',
@@ -205,12 +217,12 @@ const I18N = {
     'query.getEvent': 'Get Event',
     'query.getRecords': 'Get Settlement Records',
     'query.getAudit': 'Get Audit Record',
-    'snapshot.copyJudge': 'Copy Judge Snapshot',
+    'snapshot.copyJudge': 'Copy Snapshot',
     'snapshot.copyEngineer': 'Copy Engineer Snapshot',
-    'snapshot.copiedJudge': 'Judge snapshot copied to clipboard.',
+    'snapshot.copiedJudge': 'Snapshot copied to clipboard.',
     'snapshot.copiedEngineer': 'Engineer snapshot copied to clipboard.',
     'snapshot.fallback': 'Clipboard unavailable. Snapshot was written to Technical Evidence.',
-    'snapshot.title': 'DR Agent - Judge Snapshot',
+    'snapshot.title': 'DR Agent - Execution Snapshot',
     'snapshot.generated': 'Generated',
     'snapshot.theme': 'Theme',
     'snapshot.progress': 'Progress',
@@ -220,8 +232,6 @@ const I18N = {
     'theme.neon': 'Theme: Neon',
     'camera.enable': 'Enable Camera Mode',
     'camera.disable': 'Disable Camera Mode',
-    'judgeMode.enable': 'Enable Judge Mode',
-    'judgeMode.disable': 'Disable Judge Mode',
     'status.pending': 'pending',
     'status.in-progress': 'in-progress',
     'status.done': 'done',
@@ -238,9 +248,9 @@ const I18N = {
     'status.pass': 'PASS',
     'status.mismatch': 'mismatch',
     'status.read': 'read',
-    'network.fuji': 'Avalanche Fuji Testnet',
-    'network.fuji-live': 'Avalanche Fuji Testnet (Live Tx)',
-    'network.mainnet': 'Avalanche Mainnet',
+    'network.fuji': 'Fuji Testnet',
+    'network.fuji-live': 'Fuji Testnet (Live Tx)',
+    'network.mainnet': 'Mainnet',
     'network.simulated': 'Simulation',
     'network.local': 'Local Devnet',
     'label.participantA': 'Participant A',
@@ -364,7 +374,7 @@ const I18N = {
     'insight.claim.story': 'Settlement done; participant claim is the next critical action.',
     'insight.audit.headline': 'Audit verification pending.',
     'insight.audit.reason': 'Run hash verification to confirm on-chain anchor and recomputed payload match.',
-    'insight.audit.impact': 'Impact: audit pass unlocks judge-grade confidence in evidence integrity.',
+    'insight.audit.impact': 'Impact: audit pass unlocks review-grade confidence in evidence integrity.',
     'insight.audit.story': 'Claims complete; run audit to verify data integrity.',
     'insight.final.headline': 'Closed loop finalized.',
     'insight.final.reason': 'Create -> proofs -> close -> settle -> claim -> audit path has completed.',
@@ -395,7 +405,7 @@ const I18N = {
     'timing.fetchEvent': 'Fetching event snapshot...',
     'timing.fetchRecords': 'Fetching settlement records...',
     'timing.requestAudit': 'Requesting audit hash verification...',
-    'timing.refreshSummary': 'Refreshing judge summary for visible state updates...',
+    'timing.refreshSummary': 'Refreshing execution summary for visible state updates...',
     'timing.deferSummary': 'Summary refresh deferred for speed; final state sync continues in background.',
     'timing.awaitingTxConfirm': 'Waiting for {count} pending tx confirmation(s)...',
     'log.ready': 'ready',
@@ -418,7 +428,7 @@ const I18N = {
   },
   zh: {
     'page.title': 'DR Agent 任务驾驶舱',
-    'hero.eyebrow': 'Avalanche Build Games | 评委演示',
+    'hero.eyebrow': '协议演示 | 执行审阅',
     'hero.title': 'DR Agent 任务驾驶舱',
     'hero.subtitle': '面向需求响应事件的可验证自动结算。',
     'mission.event': '事件',
@@ -429,11 +439,9 @@ const I18N = {
     'mission.flowProgress': '流程进度',
     'mode.experience': '体验模式',
     'mode.story': '叙事模式',
-    'mode.ops': '运维模式',
     'mode.engineering': '工程模式',
-    'mode.hint.story': '叙事模式聚焦“下一步动作 + 业务结果”。',
-    'mode.hint.ops': '运维模式突出流程状态、护栏和执行细节。',
-    'mode.hint.engineering': '工程模式展示原始证据和诊断日志。',
+    'mode.hint.story': '叙事模式就是默认评审视角。',
+    'mode.hint.engineering': '工程模式展示流程细节、诊断信息和原始证据。',
     'lang.en': 'EN',
     'lang.zh': '中文',
     'story.command': '任务指挥',
@@ -441,6 +449,14 @@ const I18N = {
     'story.totalPayout': '总结算',
     'story.auditConfidence': '审计可信度',
     'story.agentThinking': 'Agent 思考',
+    'story.viewTxEvidence': '查看交易证据',
+    'story.evidenceHint': '可切换工程模式查看证据，或复制评审快照。',
+    'story.latestTxLabel': '最新交易',
+    'story.latestTxNone': '暂无交易',
+    'story.latency.idle': '延迟：等待首次 API 调用。',
+    'story.latency.running': '延迟：执行 {step} 中 | 已耗时 {elapsed} | API {api}。',
+    'story.latency.breakdown': '延迟：{step} => API {api} + {summary} = {total}；{pending}。',
+    'story.latency.pendingOnly': '延迟：正在等待 {count} 笔待确认交易。',
     'visual.title': '可视化洞察',
     'visual.subtitle': '随着 proof 与结算数据到达，图表会动态出现。',
     'visual.empty': '提交 proof 后将解锁 baseline 与 payout 图表。',
@@ -474,8 +490,8 @@ const I18N = {
     'flow.claimBtn': '6. 领取 A',
     'flow.runAllBtn': '一键全流程',
     'flow.pathHint': '主叙事路径：创建 -> Proof -> 关闭 -> 结算 -> 领取 -> 审计。',
-    'judge.title': '评委视图',
-    'judge.subtitle': '三层读数：任务上下文、KPI 结果、技术证据。',
+    'judge.title': '审阅视图',
+    'judge.subtitle': '三层读数：任务上下文、KPI 结果、执行证据。',
     'step.create': '创建',
     'step.proofs': '证明',
     'step.close': '关闭',
@@ -504,12 +520,12 @@ const I18N = {
     'query.getEvent': '查询事件',
     'query.getRecords': '查询结算记录',
     'query.getAudit': '查询审计记录',
-    'snapshot.copyJudge': '复制评委快照',
+    'snapshot.copyJudge': '复制快照',
     'snapshot.copyEngineer': '复制工程快照',
-    'snapshot.copiedJudge': '评委快照已复制到剪贴板。',
+    'snapshot.copiedJudge': '快照已复制到剪贴板。',
     'snapshot.copiedEngineer': '工程快照已复制到剪贴板。',
     'snapshot.fallback': '剪贴板不可用，已写入技术证据日志。',
-    'snapshot.title': 'DR Agent - 评委快照',
+    'snapshot.title': 'DR Agent - 执行快照',
     'snapshot.generated': '生成时间',
     'snapshot.theme': '主题',
     'snapshot.progress': '进度',
@@ -519,8 +535,6 @@ const I18N = {
     'theme.neon': '主题：霓虹',
     'camera.enable': '开启 Camera 模式',
     'camera.disable': '关闭 Camera 模式',
-    'judgeMode.enable': '开启 Judge 模式',
-    'judgeMode.disable': '关闭 Judge 模式',
     'status.pending': '待处理',
     'status.in-progress': '进行中',
     'status.done': '已完成',
@@ -537,9 +551,9 @@ const I18N = {
     'status.pass': 'PASS',
     'status.mismatch': '不一致',
     'status.read': '查询',
-    'network.fuji': 'Avalanche Fuji 测试网',
-    'network.fuji-live': 'Avalanche Fuji 测试网（真实交易）',
-    'network.mainnet': 'Avalanche 主网',
+    'network.fuji': 'Fuji 测试网',
+    'network.fuji-live': 'Fuji 测试网（真实交易）',
+    'network.mainnet': '主网',
     'network.simulated': '模拟模式',
     'network.local': '本地开发链',
     'label.participantA': '参与方 A',
@@ -694,7 +708,7 @@ const I18N = {
     'timing.fetchEvent': '正在拉取事件快照...',
     'timing.fetchRecords': '正在拉取结算记录...',
     'timing.requestAudit': '正在请求审计哈希校验...',
-    'timing.refreshSummary': '正在刷新评委汇总状态...',
+    'timing.refreshSummary': '正在刷新执行汇总状态...',
     'timing.deferSummary': '为提速已延后 summary 刷新；最终状态将继续同步。',
     'timing.awaitingTxConfirm': '正在等待 {count} 笔待确认交易上链...',
     'log.ready': '就绪',
@@ -780,9 +794,7 @@ function renderStaticI18n() {
 function refreshToggleText() {
   if (el.btnCameraMode) {
     el.btnCameraMode.textContent = state.cameraMode ? t('camera.disable') : t('camera.enable');
-  }
-  if (el.btnJudgeMode) {
-    el.btnJudgeMode.textContent = state.judgeMode ? t('judgeMode.disable') : t('judgeMode.enable');
+    el.btnCameraMode.setAttribute('aria-pressed', String(state.cameraMode));
   }
   if (el.btnTheme) {
     el.btnTheme.textContent = state.theme === 'neon' ? t('theme.neon') : t('theme.cobalt');
@@ -831,7 +843,6 @@ const state = {
   builderOpen: false,
   theme: 'cobalt',
   cameraMode: false,
-  judgeMode: false,
   lang: 'en',
   viewMode: 'story',
   judgeSummary: null,
@@ -860,18 +871,14 @@ if (state.cameraMode) {
   document.body.classList.add('camera-mode');
 }
 
-state.judgeMode = localStorage.getItem('dr_judge_mode') === '1';
-if (state.judgeMode) {
-  document.body.classList.add('judge-mode');
-}
-
 const persistedTheme = localStorage.getItem('dr_theme');
 state.theme = persistedTheme === 'neon' ? 'neon' : 'cobalt';
 document.body.dataset.theme = state.theme;
 
 const persistedViewMode = localStorage.getItem('dr_view_mode');
-state.viewMode = VIEW_MODES.includes(persistedViewMode) ? persistedViewMode : 'story';
+state.viewMode = persistedViewMode === 'engineering' ? 'engineering' : 'story';
 document.body.dataset.view = state.viewMode;
+document.body.classList.toggle('judge-mode', state.viewMode === 'story');
 
 const persistedLang = localStorage.getItem('dr_lang');
 state.lang = persistedLang === 'zh' ? 'zh' : 'en';
@@ -1054,6 +1061,38 @@ function formatStepForSummary(stepId) {
   return stepLabel(stepId);
 }
 
+function explorerTxBaseUrl(mode) {
+  const normalized = String(mode || '').toLowerCase();
+  if (normalized === 'fuji' || normalized === 'fuji-live') {
+    return 'https://testnet.snowtrace.io/tx/';
+  }
+  if (normalized === 'mainnet') {
+    return 'https://snowtrace.io/tx/';
+  }
+  return '';
+}
+
+function getLatestTxHash() {
+  for (let i = state.timing.history.length - 1; i >= 0; i -= 1) {
+    const txHash = state.timing.history[i]?.txHash;
+    if (txHash) return txHash;
+  }
+
+  const settlementClaim = state.settlements.find((row) => row?.claim_tx_hash)?.claim_tx_hash;
+  if (settlementClaim) return settlementClaim;
+  const settlementTx = state.settlements.find((row) => row?.tx_hash)?.tx_hash;
+  if (settlementTx) return settlementTx;
+  const closeTx = state.event?.close_tx_hash;
+  if (closeTx) return closeTx;
+  const eventTx = state.event?.tx_hash;
+  if (eventTx) return eventTx;
+
+  for (const proof of Object.values(state.proofs)) {
+    if (proof?.tx_hash) return proof.tx_hash;
+  }
+  return '';
+}
+
 function siteDisplay(siteId) {
   if (state.viewMode === 'story') {
     if (siteId === 'site-a') return t('label.participantA');
@@ -1062,15 +1101,30 @@ function siteDisplay(siteId) {
   return siteId;
 }
 
+function truncateForDisplay(text, maxChars) {
+  const raw = String(text ?? '').trim();
+  if (!maxChars || raw.length <= maxChars) return raw;
+  return `${raw.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+}
+
+function setTruncatedText(node, text, maxChars) {
+  if (!node) return;
+  const raw = String(text ?? '').trim();
+  const display = truncateForDisplay(raw, maxChars);
+  node.textContent = display;
+  if (display !== raw) node.setAttribute('title', raw);
+  else node.removeAttribute('title');
+}
+
 function applyViewMode(mode) {
   const next = VIEW_MODES.includes(mode) ? mode : 'story';
   state.viewMode = next;
   document.body.dataset.view = next;
+  document.body.classList.toggle('judge-mode', next === 'story');
   localStorage.setItem('dr_view_mode', next);
 
   const mapping = [
     { node: el.btnViewStory, mode: 'story' },
-    { node: el.btnViewOps, mode: 'ops' },
     { node: el.btnViewEngineering, mode: 'engineering' },
   ];
   for (const item of mapping) {
@@ -1088,7 +1142,6 @@ function applyViewMode(mode) {
 function renderViewMode() {
   if (el.modeHint) {
     if (state.viewMode === 'story') el.modeHint.textContent = t('mode.hint.story');
-    else if (state.viewMode === 'ops') el.modeHint.textContent = t('mode.hint.ops');
     else el.modeHint.textContent = t('mode.hint.engineering');
   }
   refreshToggleText();
@@ -1124,6 +1177,23 @@ function decodeError(message) {
       headline: t('error.settleBlocked.headline'),
       hint: t('error.settleBlocked.hint'),
       next: t('error.settleBlocked.next'),
+    };
+  }
+
+  if (
+    normalized.includes('create_tx_pending_confirmation') ||
+    normalized.includes('create transaction is submitted but not confirmed yet') ||
+    normalized.includes('close_tx_pending_confirmation') ||
+    normalized.includes('event_not_closed_onchain') ||
+    normalized.includes('close transaction still pending confirmation') ||
+    normalized.includes('settle_tx_pending_confirmation') ||
+    normalized.includes('settlement transaction still pending confirmation')
+  ) {
+    return {
+      level: 'warn',
+      headline: t('error.pendingChain.headline'),
+      hint: t('error.pendingChain.hint'),
+      next: t('error.pendingChain.next'),
     };
   }
 
@@ -1879,45 +1949,77 @@ function renderStoryHero(ui) {
   const auditMatch = summary?.audit_match ?? (state.audit ? !!state.audit.match : null);
   const insight = buildAgentInsight(ui);
   const txPipeline = collectTxPipeline();
+  let heroTitle = '';
+  let heroSubtitle = '';
 
   if (activeStep === 'completed') {
-    el.heroTitle.textContent = t('hero.finalized.title');
-    el.heroSubtitle.textContent = t('hero.finalized.subtitle');
+    heroTitle = t('hero.finalized.title');
+    heroSubtitle = t('hero.finalized.subtitle');
   } else if (state.lastError) {
-    el.heroTitle.textContent = t('hero.error.title', {
+    heroTitle = t('hero.error.title', {
       step: formatStepForSummary(endpointToStep(state.lastError) || activeStep),
     });
-    el.heroSubtitle.textContent = t('hero.error.subtitle');
+    heroSubtitle = t('hero.error.subtitle');
   } else if (activeStep === 'proofs') {
     const needed = ui.requiredSites.map((siteId) => siteDisplay(siteId)).join(' + ');
-    el.heroTitle.textContent = t('hero.proofs.title');
-    el.heroSubtitle.textContent = t('hero.proofs.subtitle', {
+    heroTitle = t('hero.proofs.title');
+    heroSubtitle = t('hero.proofs.subtitle', {
       need: ui.requiredSites.length,
       participants: needed || `${t('label.participantA')} + ${t('label.participantB')}`,
     });
   } else if (activeStep === 'settle') {
-    el.heroTitle.textContent = t('hero.settle.title');
-    el.heroSubtitle.textContent = t('hero.settle.subtitle');
+    heroTitle = t('hero.settle.title');
+    heroSubtitle = t('hero.settle.subtitle');
   } else if (activeStep === 'audit') {
-    el.heroTitle.textContent = t('hero.audit.title');
-    el.heroSubtitle.textContent = t('hero.audit.subtitle');
+    heroTitle = t('hero.audit.title');
+    heroSubtitle = t('hero.audit.subtitle');
   } else {
-    el.heroTitle.textContent = t('hero.awaiting.title', { step: formatStepForSummary(activeStep) });
-    el.heroSubtitle.textContent = insight.reason;
+    heroTitle = t('hero.awaiting.title', { step: formatStepForSummary(activeStep) });
+    heroSubtitle = insight.reason;
   }
 
   if (!state.lastError && txPipeline.submitted > 0) {
-    el.heroSubtitle.textContent = t('hero.txPending', {
-      subtitle: el.heroSubtitle.textContent,
+    heroSubtitle = t('hero.txPending', {
+      subtitle: heroSubtitle,
       count: txPipeline.submitted,
     });
   }
+
+  setTruncatedText(el.heroTitle, heroTitle, HERO_TITLE_MAX_CHARS);
+  setTruncatedText(el.heroSubtitle, heroSubtitle, HERO_SUBTITLE_MAX_CHARS);
 
   if (el.storyEnergy) el.storyEnergy.textContent = formatKwh(totalReduction);
   if (el.storyPayout) el.storyPayout.textContent = formatPayout(totalPayout);
   if (el.storyAudit) {
     if (!auditRequested) el.storyAudit.textContent = displayStatus('pending');
     else el.storyAudit.textContent = auditMatch ? t('status.pass') : t('status.mismatch');
+  }
+  if (el.storyLatencyLine) el.storyLatencyLine.textContent = buildStoryLatencyLine();
+}
+
+function renderStoryEvidenceRow() {
+  if (!el.storyLatestTxLine || !el.storyLatestTxLink) return;
+
+  const latestTx = getLatestTxHash();
+  const mode = state.judgeSummary?.network_mode || state.chainMode || '';
+  const baseUrl = explorerTxBaseUrl(mode);
+
+  if (!latestTx) {
+    el.storyLatestTxLink.textContent = t('story.latestTxNone');
+    el.storyLatestTxLink.removeAttribute('href');
+    el.storyLatestTxLink.removeAttribute('title');
+    el.storyLatestTxLink.classList.add('is-empty');
+    return;
+  }
+
+  el.storyLatestTxLink.textContent = shortHash(latestTx);
+  el.storyLatestTxLink.setAttribute('title', latestTx);
+  el.storyLatestTxLink.classList.remove('is-empty');
+
+  if (baseUrl) {
+    el.storyLatestTxLink.setAttribute('href', `${baseUrl}${latestTx}`);
+  } else {
+    el.storyLatestTxLink.removeAttribute('href');
   }
 }
 
@@ -2118,20 +2220,13 @@ function toggleCameraMode() {
   renderAll();
 }
 
-function toggleJudgeMode() {
-  state.judgeMode = !state.judgeMode;
-  document.body.classList.toggle('judge-mode', state.judgeMode);
-  localStorage.setItem('dr_judge_mode', state.judgeMode ? '1' : '0');
-  refreshToggleText();
-  if (el.btnJudgeMode) el.btnJudgeMode.setAttribute('aria-pressed', String(state.judgeMode));
-}
-
 function renderAll() {
   const ui = deriveUiState();
   renderStaticI18n();
   renderViewMode();
   renderMissionStrip(ui);
   renderStoryHero(ui);
+  renderStoryEvidenceRow();
   renderVisualInsights();
   renderFlowTimeline(ui);
   renderKpiGrid(ui);
@@ -2181,6 +2276,31 @@ function appendLog(label, payload) {
 function plusMinutes(mins) {
   const d = new Date(Date.now() + mins * 60 * 1000);
   return d.toISOString().replace('.000', '');
+}
+
+function isClosePendingConfirmationError(err) {
+  const text = String(err?.message || err || '').toLowerCase();
+  return (
+    text.includes('close_tx_pending_confirmation') ||
+    text.includes('event_not_closed_onchain') ||
+    text.includes('close transaction still pending confirmation')
+  );
+}
+
+function isCreatePendingConfirmationError(err) {
+  const text = String(err?.message || err || '').toLowerCase();
+  return (
+    text.includes('create_tx_pending_confirmation') ||
+    text.includes('create transaction is submitted but not confirmed yet')
+  );
+}
+
+function isSettlePendingConfirmationError(err) {
+  const text = String(err?.message || err || '').toLowerCase();
+  return (
+    text.includes('settle_tx_pending_confirmation') ||
+    text.includes('settlement transaction still pending confirmation')
+  );
 }
 
 async function callApi(path, method, body, apiKey, actorId = 'ui-user', options = {}) {
@@ -2350,6 +2470,44 @@ function buildTimingNextLine(lastStep, txPipeline) {
     tx: txPart,
     pendingPart,
   });
+}
+
+function buildStoryLatencyLine() {
+  const txPipeline = collectTxPipeline();
+  if (state.busy && state.timing.current) {
+    const current = state.timing.current;
+    return t('story.latency.running', {
+      step: formatStepForSummary(current.stepId),
+      elapsed: formatMs(performance.now() - current.startedAt),
+      api: formatMs(current.apiMs),
+    });
+  }
+
+  if (state.timing.last) {
+    const lastStep = state.timing.last;
+    const summaryPart = lastStep.deferredSummary
+      ? t('diag.delayBreakdown.summaryDeferred')
+      : t('diag.delayBreakdown.summary', { summary: formatMs(lastStep.summaryMs) });
+    const pendingPart =
+      txPipeline.submitted > 0
+        ? t('diag.delayBreakdown.pending', { count: txPipeline.submitted })
+        : txPipeline.failed > 0
+          ? t('diag.delayBreakdown.failed', { count: txPipeline.failed })
+          : t('diag.delayBreakdown.nonePending');
+    return t('story.latency.breakdown', {
+      step: formatStepForSummary(lastStep.stepId),
+      api: formatMs(lastStep.apiMs),
+      summary: summaryPart,
+      total: formatMs(lastStep.totalMs),
+      pending: pendingPart,
+    });
+  }
+
+  if (txPipeline.submitted > 0) {
+    return t('story.latency.pendingOnly', { count: txPipeline.submitted });
+  }
+
+  return t('story.latency.idle');
 }
 
 function buildDiagnosticsView(ui) {
@@ -2585,35 +2743,108 @@ async function getAudit(options = {}) {
 
 async function runFullFlow() {
   appendLog('run', t('log.runStart', { eventId: cfg().eventId }));
-  await createEvent({ deferSummary: true });
-  await waitForPendingConfirmationsBefore('proofs');
-  const requiredSites = requiredProofSites();
-  for (const siteId of requiredSites) {
-    const scenario = defaultProofScenario(siteId);
-    await submitProof(siteId, scenario.baseline, scenario.actual, { deferSummary: true });
+  const maxLoops = 18;
+  for (let loop = 0; loop < maxLoops; loop += 1) {
+    const ui = deriveUiState();
+    if (ui.currentStep === 'completed') {
+      appendLog('run', t('log.runDone'));
+      return;
+    }
+
+    if (ui.currentStep === 'create') {
+      await createEvent({ deferSummary: true });
+      continue;
+    }
+
+    if (ui.currentStep === 'proofs') {
+      const requiredSites = requiredProofSites();
+      let submittedOne = false;
+      for (const siteId of requiredSites) {
+        if (!state.proofs[siteId]) {
+          const scenario = defaultProofScenario(siteId);
+          try {
+            await submitProof(siteId, scenario.baseline, scenario.actual, {
+              deferSummary: true,
+            });
+            submittedOne = true;
+          } catch (err) {
+            if (!isCreatePendingConfirmationError(err)) throw err;
+            appendLog('run', 'proof waiting for create confirmation; retrying...');
+            await sleep(PENDING_TX_POLL_MS);
+            await refreshJudgeSummary();
+          }
+          break;
+        }
+      }
+      if (submittedOne) continue;
+      await waitForPendingConfirmationsBefore('proofs');
+      continue;
+    }
+
+    if (ui.currentStep === 'close') {
+      await closeEvent({ deferSummary: true });
+      continue;
+    }
+
+    if (ui.currentStep === 'settle') {
+      await waitForPendingConfirmationsBefore('settle');
+      try {
+        await settleEvent({ deferSummary: true });
+      } catch (err) {
+        if (!isClosePendingConfirmationError(err)) throw err;
+        appendLog('run', 'settle waiting for close confirmation; retrying...');
+        await sleep(PENDING_TX_POLL_MS);
+        await refreshJudgeSummary();
+      }
+      continue;
+    }
+
+    if (ui.currentStep === 'claim') {
+      await waitForPendingConfirmationsBefore('claim');
+      try {
+        await claimA({ deferSummary: true });
+      } catch (err) {
+        if (!isSettlePendingConfirmationError(err)) throw err;
+        appendLog('run', 'claim waiting for settlement confirmation; retrying...');
+        await sleep(PENDING_TX_POLL_MS);
+        await refreshJudgeSummary();
+      }
+      continue;
+    }
+
+    if (ui.currentStep === 'audit') {
+      await waitForPendingConfirmationsBefore('audit');
+      await getAudit();
+      continue;
+    }
   }
-  await closeEvent({ deferSummary: true });
-  await waitForPendingConfirmationsBefore('settle');
-  await settleEvent({ deferSummary: true });
-  await waitForPendingConfirmationsBefore('claim');
-  await claimA({ deferSummary: true });
-  await waitForPendingConfirmationsBefore('audit');
-  await getAudit();
-  appendLog('run', t('log.runDone'));
+
+  throw new Error('run full flow exceeded max retries');
+}
+
+function preferredRetryStep() {
+  for (const step of FLOW_STEPS) {
+    if (state.stepErrors[step.id]) return step.id;
+  }
+  return endpointToStep(state.lastError);
 }
 
 async function runNextStep() {
   const ui = deriveUiState();
+  const targetStep = preferredRetryStep() || ui.currentStep;
 
-  if (['proofs', 'settle', 'claim', 'audit'].includes(ui.currentStep)) {
-    await waitForPendingConfirmationsBefore(ui.currentStep);
+  if (['proofs', 'settle', 'claim', 'audit'].includes(targetStep)) {
+    await waitForPendingConfirmationsBefore(targetStep);
   }
 
-  if (ui.currentStep === 'create') {
+  if (targetStep === 'completed') {
+    return;
+  }
+  if (targetStep === 'create') {
     await createEvent();
     return;
   }
-  if (ui.currentStep === 'proofs') {
+  if (targetStep === 'proofs') {
     for (const siteId of ui.requiredSites) {
       if (!state.proofs[siteId]) {
         const scenario = defaultProofScenario(siteId);
@@ -2634,19 +2865,35 @@ async function runNextStep() {
     }
     return;
   }
-  if (ui.currentStep === 'close') {
+  if (targetStep === 'close') {
     await closeEvent();
     return;
   }
-  if (ui.currentStep === 'settle') {
-    await settleEvent();
+  if (targetStep === 'settle') {
+    try {
+      await settleEvent();
+    } catch (err) {
+      if (!isClosePendingConfirmationError(err)) throw err;
+      appendLog('run', 'settle waiting for close confirmation; retrying...');
+      await sleep(PENDING_TX_POLL_MS);
+      await refreshJudgeSummary();
+      await settleEvent();
+    }
     return;
   }
-  if (ui.currentStep === 'claim') {
-    await claimA();
+  if (targetStep === 'claim') {
+    try {
+      await claimA();
+    } catch (err) {
+      if (!isSettlePendingConfirmationError(err)) throw err;
+      appendLog('run', 'claim waiting for settlement confirmation; retrying...');
+      await sleep(PENDING_TX_POLL_MS);
+      await refreshJudgeSummary();
+      await claimA();
+    }
     return;
   }
-  if (ui.currentStep === 'audit') {
+  if (targetStep === 'audit') {
     await getAudit();
   }
 }
@@ -2658,6 +2905,26 @@ function triggerButton(id) {
 }
 
 function handleActionError(err, fallbackStep) {
+  if (
+    isCreatePendingConfirmationError(err) ||
+    isClosePendingConfirmationError(err) ||
+    isSettlePendingConfirmationError(err)
+  ) {
+    const activeTiming = state.timing.current;
+    if (activeTiming) {
+      finishStepTiming({
+        txState: 'submitted',
+        deferredSummary: true,
+      });
+    }
+    if (isCreatePendingConfirmationError(err)) delete state.stepErrors.proofs;
+    if (isClosePendingConfirmationError(err)) delete state.stepErrors.settle;
+    if (isSettlePendingConfirmationError(err)) delete state.stepErrors.claim;
+    clearErrorState();
+    appendLog('run', 'deferred: waiting on prior on-chain confirmation');
+    return;
+  }
+
   const message = err.message || String(err);
   const activeTiming = state.timing.current;
   if (activeTiming) {
@@ -2708,13 +2975,6 @@ if (el.btnViewStory) {
   });
 }
 
-if (el.btnViewOps) {
-  el.btnViewOps.addEventListener('click', () => {
-    applyViewMode('ops');
-    renderAll();
-  });
-}
-
 if (el.btnViewEngineering) {
   el.btnViewEngineering.addEventListener('click', () => {
     applyViewMode('engineering');
@@ -2744,12 +3004,25 @@ if (el.btnExportSnapshot) {
   });
 }
 
-if (el.btnCameraMode) {
-  el.btnCameraMode.addEventListener('click', toggleCameraMode);
+if (el.btnStorySnapshot) {
+  el.btnStorySnapshot.addEventListener('click', async () => {
+    await exportJudgeSnapshot();
+  });
 }
 
-if (el.btnJudgeMode) {
-  el.btnJudgeMode.addEventListener('click', toggleJudgeMode);
+if (el.btnStoryTechEvidence) {
+  el.btnStoryTechEvidence.addEventListener('click', () => {
+    state.evidenceOpen = true;
+    applyViewMode('engineering');
+    renderAll();
+    if (el.technicalEvidence) {
+      el.technicalEvidence.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+}
+
+if (el.btnCameraMode) {
+  el.btnCameraMode.addEventListener('click', toggleCameraMode);
 }
 
 if (el.builderPanel) {
@@ -2788,7 +3061,7 @@ bindAction('btnSettle', settleEvent, 'settle');
 bindAction('btnClaimA', claimA, 'claim');
 bindAction('btnRunAll', runFullFlow, 'create');
 bindAction('btnRunAllHero', runFullFlow, 'create');
-bindAction('btnNextStep', runNextStep, 'create');
+bindAction('btnNextStep', runNextStep);
 bindAction('btnGetEvent', getEvent, 'create');
 bindAction('btnGetRecords', getRecords, 'settle');
 bindAction('btnAudit', getAudit, 'audit');

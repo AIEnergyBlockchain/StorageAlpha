@@ -3,6 +3,18 @@ import path from "node:path";
 
 import { ethers, network } from "hardhat";
 
+function parsePositiveUnits(name: string, defaultValue: string): string {
+  const raw = (process.env[name] ?? defaultValue).trim();
+  if (!raw) {
+    throw new Error(`${name} must be a non-empty number string`);
+  }
+  const parsed = ethers.parseUnits(raw, 18);
+  if (parsed <= 0n) {
+    throw new Error(`${name} must be greater than 0`);
+  }
+  return raw;
+}
+
 async function main(): Promise<void> {
   if (network.name !== "fuji") {
     throw new Error(`This script is for fuji network only. Current: ${network.name}`);
@@ -30,8 +42,9 @@ async function main(): Promise<void> {
   const proofRegistry = await proofFactory.deploy(await eventManager.getAddress());
   await proofRegistry.waitForDeployment();
 
-  // Deploy DRT token — 1,000,000 DRT (18 decimals)
-  const initialSupply = ethers.parseEther("1000000");
+  const initialSupplyUnits = parsePositiveUnits("DRT_INITIAL_SUPPLY", "1000000");
+  const fundToSettlementUnits = (process.env.DRT_FUND_SETTLEMENT_UNITS ?? "500000").trim().toLowerCase();
+  const initialSupply = ethers.parseUnits(initialSupplyUnits, 18);
   const drtFactory = await ethers.getContractFactory("DRToken");
   const drtToken = await drtFactory.deploy(deployer.address, initialSupply);
   await drtToken.waitForDeployment();
@@ -46,10 +59,23 @@ async function main(): Promise<void> {
   await settlement.waitForDeployment();
 
   // Fund Settlement contract with DRT so it can pay out on claim
-  const fundTx = await drtToken.transfer(
-    await settlement.getAddress(),
-    ethers.parseEther("500000")
-  );
+  const deployerDrtBalanceBefore = await drtToken.balanceOf(deployer.address);
+  let fundAmount = 0n;
+  if (fundToSettlementUnits === "max") {
+    fundAmount = deployerDrtBalanceBefore;
+  } else {
+    fundAmount = ethers.parseUnits(fundToSettlementUnits, 18);
+  }
+  if (fundAmount <= 0n) {
+    throw new Error("DRT_FUND_SETTLEMENT_UNITS must be > 0 or 'max'");
+  }
+  if (fundAmount > deployerDrtBalanceBefore) {
+    throw new Error(
+      `Insufficient deployer DRT for settlement funding. requested=${fundAmount.toString()} available=${deployerDrtBalanceBefore.toString()}`
+    );
+  }
+
+  const fundTx = await drtToken.transfer(await settlement.getAddress(), fundAmount);
   await fundTx.wait();
 
   const setTx = await eventManager.setSettlementContract(await settlement.getAddress());
@@ -69,6 +95,11 @@ async function main(): Promise<void> {
     tx_hashes: {
       fund_settlement_drt: fundTx.hash,
       set_settlement_contract: setReceipt?.hash ?? setTx.hash,
+    },
+    funding: {
+      initial_supply_units: initialSupplyUnits,
+      fund_settlement_units: fundToSettlementUnits === "max" ? "max" : fundToSettlementUnits,
+      fund_settlement_wei: fundAmount.toString(),
     },
   };
 

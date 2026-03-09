@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a judge-facing Fuji evidence markdown bundle.
+"""Build a Fuji execution evidence markdown bundle.
 
 This script converts deployment JSON evidence into a markdown file that is easy
 to paste into submission materials and demo docs.
@@ -19,7 +19,7 @@ FUJI_EXPLORER = "https://testnet.snowtrace.io"
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Render judge evidence bundle from deployment report"
+        description="Render execution evidence bundle from deployment report"
     )
     parser.add_argument(
         "--report",
@@ -28,8 +28,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output",
-        default="guide/docs/Fuji-Evidence-Bundle-latest.md",
-        help="Output markdown path (default: guide/docs/Fuji-Evidence-Bundle-latest.md)",
+        default="guide/docs/Fuji-Execution-Evidence-Bundle-latest.md",
+        help="Output markdown path (default: guide/docs/Fuji-Execution-Evidence-Bundle-latest.md)",
     )
     parser.add_argument(
         "--explorer",
@@ -99,10 +99,15 @@ def main() -> None:
     event_manager = fmt_value(contracts.get("event_manager"))
     proof_registry = fmt_value(contracts.get("proof_registry"))
     settlement = fmt_value(contracts.get("settlement"))
+    drt_token = fmt_value(contracts.get("drt_token"))
+    deploy_settlement_tx = fmt_value(tx_hashes.get("deploy_settlement"))
+    fund_settlement_drt_tx = fmt_value(tx_hashes.get("fund_settlement_drt"))
     set_settlement_tx = fmt_value(tx_hashes.get("set_settlement_contract"))
+    funding = report.get("funding") or {}
+    fund_amount_units = fmt_value(funding.get("fund_amount_units"))
 
     lines: list[str] = []
-    lines.append("# Fuji Judge Evidence Bundle")
+    lines.append("# Fuji Execution Evidence Bundle")
     lines.append("")
     lines.append(f"- Generated at (UTC): `{generated_at}`")
     lines.append(f"- Source report: `{report_path}`")
@@ -125,10 +130,22 @@ def main() -> None:
         f"| Settlement | `{settlement}` | {mk_link(explorer, 'address', settlement)} |"
     )
     lines.append(
+        f"| DRT Token | `{drt_token}` | {mk_link(explorer, 'address', drt_token)} |"
+    )
+    lines.append(
+        f"| deploySettlement tx | `{deploy_settlement_tx}` | {mk_link(explorer, 'tx', deploy_settlement_tx)} |"
+    )
+    lines.append(
+        f"| fundSettlementDRT tx | `{fund_settlement_drt_tx}` | {mk_link(explorer, 'tx', fund_settlement_drt_tx)} |"
+    )
+    lines.append(
         f"| setSettlementContract tx | `{set_settlement_tx}` | {mk_link(explorer, 'tx', set_settlement_tx)} |"
     )
+    lines.append(
+        f"| Settlement funded (DRT units) | `{fund_amount_units}` | - |"
+    )
     lines.append("")
-    lines.append("## Judge Submission Checklist")
+    lines.append("## Execution Checklist")
     lines.append("")
     lines.append("- [ ] Explorer links open correctly and match contract addresses.")
     lines.append(

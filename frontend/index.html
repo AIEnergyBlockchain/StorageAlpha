@@ -17,7 +17,7 @@
 
     <main class="cockpit">
       <header class="hero">
-        <p class="eyebrow" data-i18n="hero.eyebrow">Avalanche Build Games | Judge Demo</p>
+        <p class="eyebrow" data-i18n="hero.eyebrow">Protocol Demo | Execution Review</p>
         <h1 data-i18n="hero.title">DR Agent Mission Cockpit</h1>
         <p class="subtitle" data-i18n="hero.subtitle">Verifiable automated settlement for demand response events.</p>
       </header>
@@ -55,7 +55,6 @@
       <section class="panel mode-strip reveal" style="--delay: 0.04s">
         <div class="mode-toggle" role="tablist" aria-label="Experience mode" data-i18n-attr="aria-label:mode.experience">
           <button id="btnViewStory" class="mode-btn is-active" data-view="story" aria-selected="true" data-i18n="mode.story">Story Mode</button>
-          <button id="btnViewOps" class="mode-btn" data-view="ops" aria-selected="false" data-i18n="mode.ops">Ops Mode</button>
           <button id="btnViewEngineering" class="mode-btn" data-view="engineering" aria-selected="false" data-i18n="mode.engineering">Engineering Mode</button>
           <div class="lang-switch" data-i18n-attr="aria-label:mode.experience">
             <button id="btnLangEn" class="mode-btn is-active" aria-pressed="true" data-i18n="lang.en">EN</button>
@@ -70,6 +69,7 @@
           <p class="eyebrow" data-i18n="story.command">Mission Command</p>
           <h2 id="heroTitle">Next Step: Create Event</h2>
           <p id="heroSubtitle" class="subtitle">Launch a demand response event to initialize the settlement loop.</p>
+          <p id="storyLatencyLine" class="hint story-latency-line">Delay: waiting for first API call.</p>
           <div class="hero-actions">
             <button id="btnNextStep" class="btn btn-strong btn-main-cta" data-i18n="action.next">Execute Next Step</button>
             <button id="btnRunAllHero" class="btn" data-i18n="action.runAll">Auto Run Full Flow</button>
@@ -93,6 +93,20 @@
             <p id="storyInsight" class="value">Waiting for mission data.</p>
           </article>
         </div>
+      </section>
+
+      <section id="storyEvidenceRow" class="panel story-evidence-row reveal" style="--delay: 0.065s">
+        <div class="story-evidence-tools">
+          <button id="btnStoryTechEvidence" class="btn btn-ghost" data-i18n="story.viewTxEvidence">View Tx Evidence</button>
+          <button id="btnStorySnapshot" class="btn" data-i18n="snapshot.copyJudge">Copy Snapshot</button>
+        </div>
+        <p id="storyEvidenceHint" class="hint" data-i18n="story.evidenceHint">
+          Open engineering evidence or copy a review snapshot.
+        </p>
+        <p id="storyLatestTxLine" class="hint story-tx-line">
+          <span data-i18n="story.latestTxLabel">Latest Tx</span>:
+          <a id="storyLatestTxLink" class="story-tx-link" href="#" target="_blank" rel="noopener noreferrer">--</a>
+        </p>
       </section>
 
       <section id="visualInsights" class="panel visual-insights hidden reveal" style="--delay: 0.07s">
@@ -248,13 +262,12 @@
       <section class="panel judge-view reveal" style="--delay: 0.14s">
         <div class="section-head">
           <div class="section-head-main">
-            <h2 data-i18n="judge.title">Judge View</h2>
+            <h2 data-i18n="judge.title">Execution View</h2>
             <p data-i18n="judge.subtitle">Three-layer readout: mission context, KPI outcomes, technical evidence.</p>
           </div>
           <div class="section-actions">
             <button id="btnTheme" class="btn btn-compact" aria-label="Toggle theme">Theme: Cobalt</button>
             <button id="btnCameraMode" class="btn btn-compact" aria-pressed="false">Enable Camera Mode</button>
-            <button id="btnJudgeMode" class="btn btn-compact" aria-pressed="false">Enable Judge Mode</button>
           </div>
         </div>
 
@@ -292,12 +305,12 @@
         </div>
 
         <div class="kpi-grid">
-          <article id="kpiCardStatus" class="kpi-card" data-state="pending">
+          <article id="kpiCardStatus" class="kpi-card kpi-secondary" data-state="pending">
             <p class="kpi-label" data-i18n="kpi.status">Status</p>
             <p id="kpiStatus" class="kpi-value">pending</p>
             <p id="kpiStatusHint" class="kpi-hint">Waiting for event creation.</p>
           </article>
-          <article id="kpiCardCoverage" class="kpi-card kpi-secondary" data-state="pending">
+          <article id="kpiCardCoverage" class="kpi-card" data-state="pending">
             <p class="kpi-label" data-i18n="kpi.coverage">Proof Coverage</p>
             <p id="kpiCoverage" class="kpi-value">0 / 2 sites</p>
             <p id="kpiCoverageHint" class="kpi-hint">No participant proofs submitted yet.</p>
@@ -307,7 +320,7 @@
             <p id="kpiPayout" class="kpi-value">0 DRT</p>
             <p id="kpiPayoutHint" class="kpi-hint">Calculated after settlement.</p>
           </article>
-          <article id="kpiCardClaim" class="kpi-card" data-state="pending">
+          <article id="kpiCardClaim" class="kpi-card kpi-secondary" data-state="pending">
             <p class="kpi-label" data-i18n="kpi.claimA">Claim (site-a)</p>
             <p id="kpiClaim" class="kpi-value">pending</p>
             <p id="kpiClaimHint" class="kpi-hint">Awaiting claim action.</p>
@@ -395,7 +408,7 @@
           <button id="evidenceToggle" class="btn btn-ghost" aria-controls="technicalEvidence" aria-expanded="false">
             <span data-i18n="evidence.toggleOpen">View Technical Evidence</span>
           </button>
-          <button id="btnExportSnapshot" class="btn" data-i18n="snapshot.copyJudge">Copy Judge Snapshot</button>
+          <button id="btnExportSnapshot" class="btn" data-i18n="snapshot.copyJudge">Copy Snapshot</button>
         </div>
         <p id="snapshotFeedback" class="hint snapshot-feedback" aria-live="polite"></p>
       </section>
