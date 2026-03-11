@@ -31,6 +31,14 @@
           <p class="label" data-i18n="mission.chainMode">Chain Mode</p>
           <p id="missionChainMode" class="value">unknown</p>
         </article>
+        <article class="mission-item mission-item-bridge">
+          <p class="label" data-i18n="mission.bridgeStatus">Bridge</p>
+          <p id="missionBridgeStatus" class="value">--</p>
+        </article>
+        <article class="mission-item mission-item-icm">
+          <p class="label" data-i18n="mission.icmStatus">ICM</p>
+          <p id="missionICMStatus" class="value">--</p>
+        </article>
         <article class="mission-item">
           <p class="label" data-i18n="mission.currentStep">Current Step</p>
           <p id="missionStep" class="value">Create</p>
@@ -173,6 +181,11 @@
               <span id="visPayoutSiteBValue" class="mono">--</span>
             </div>
           </article>
+
+          <article id="visualBaselineCard" class="visual-card hidden">
+            <h3 data-i18n="visual.baselineTitle">Baseline Comparison</h3>
+            <div id="baselineMethodRows" class="baseline-methods"></div>
+          </article>
         </div>
       </section>
 
@@ -242,6 +255,17 @@
           data-tab="audit"
         >
           <span data-i18n="tab.audit">Audit</span>
+        </button>
+        <button
+          id="tab-crosschain-btn"
+          class="tab"
+          role="tab"
+          aria-selected="false"
+          aria-controls="tab-crosschain"
+          tabindex="-1"
+          data-tab="crosschain"
+        >
+          <span data-i18n="tab.crosschain">Cross-Chain</span>
         </button>
       </nav>
 
@@ -400,6 +424,68 @@
         </div>
         <div class="actions">
           <button id="btnAudit" class="btn" data-i18n="query.getAudit">Get Audit Record</button>
+        </div>
+      </section>
+
+      <section id="tab-crosschain" class="tab-panel panel hidden" role="tabpanel" aria-labelledby="tab-crosschain-btn">
+        <h2 data-i18n="crosschain.title">Cross-Chain Dashboard</h2>
+
+        <div class="crosschain-stats-grid">
+          <div class="crosschain-stat-card">
+            <p class="stat-value" id="bridgeStatsTotal">0</p>
+            <p class="stat-label" data-i18n="crosschain.bridgeTitle">Bridge Transfers</p>
+          </div>
+          <div class="crosschain-stat-card">
+            <p class="stat-value" id="bridgeStatsPending">0</p>
+            <p class="stat-label" data-i18n="crosschain.pending">Pending</p>
+          </div>
+          <div class="crosschain-stat-card">
+            <p class="stat-value" id="bridgeStatsCompleted">0</p>
+            <p class="stat-label" data-i18n="crosschain.completed">Completed</p>
+          </div>
+          <div class="crosschain-stat-card">
+            <p class="stat-value" id="icmStatsTotal">0</p>
+            <p class="stat-label" data-i18n="crosschain.icmTitle">ICM Messages</p>
+          </div>
+          <div class="crosschain-stat-card">
+            <p class="stat-value" id="icmStatsPending">0</p>
+            <p class="stat-label" data-i18n="crosschain.pending">Pending</p>
+          </div>
+        </div>
+
+        <h3 data-i18n="crosschain.bridgeTitle">Bridge Transfers</h3>
+        <table class="crosschain-table">
+          <thead>
+            <tr>
+              <th data-i18n="crosschain.direction">Direction</th>
+              <th data-i18n="crosschain.amount">Amount</th>
+              <th data-i18n="crosschain.status">Status</th>
+              <th data-i18n="crosschain.sourceTx">Source Tx</th>
+              <th data-i18n="crosschain.destTx">Dest Tx</th>
+            </tr>
+          </thead>
+          <tbody id="bridgeTransfersBody">
+            <tr><td colspan="5" class="empty-row" data-i18n="crosschain.noTransfers">No bridge transfers yet.</td></tr>
+          </tbody>
+        </table>
+
+        <h3 data-i18n="crosschain.icmTitle">ICM Messages</h3>
+        <table class="crosschain-table">
+          <thead>
+            <tr>
+              <th data-i18n="crosschain.type">Type</th>
+              <th data-i18n="crosschain.route">Route</th>
+              <th data-i18n="crosschain.status">Status</th>
+              <th data-i18n="crosschain.sender">Sender</th>
+            </tr>
+          </thead>
+          <tbody id="icmMessagesBody">
+            <tr><td colspan="4" class="empty-row" data-i18n="crosschain.noMessages">No ICM messages yet.</td></tr>
+          </tbody>
+        </table>
+
+        <div class="actions">
+          <button id="btnRefreshCrosschain" class="btn" data-i18n="crosschain.refresh">Refresh</button>
         </div>
       </section>
 

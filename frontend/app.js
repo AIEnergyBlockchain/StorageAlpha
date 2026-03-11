@@ -14,8 +14,9 @@ const panels = {
   control: document.getElementById('tab-control'),
   event: document.getElementById('tab-event'),
   audit: document.getElementById('tab-audit'),
+  crosschain: document.getElementById('tab-crosschain'),
 };
-const TAB_ORDER = ['control', 'event', 'audit'];
+const TAB_ORDER = ['control', 'event', 'audit', 'crosschain'];
 const MAX_LOG_ENTRIES = 320;
 const MAX_STEP_TIMING_ENTRIES = 24;
 const PENDING_TX_WAIT_TIMEOUT_MS = 120000;
@@ -120,6 +121,16 @@ const el = {
   errorNext: document.getElementById('errorNext'),
   evidenceToggle: document.getElementById('evidenceToggle'),
   technicalEvidence: document.getElementById('technicalEvidence'),
+  missionBridgeStatus: document.getElementById('missionBridgeStatus'),
+  missionICMStatus: document.getElementById('missionICMStatus'),
+  bridgeTransfersBody: document.getElementById('bridgeTransfersBody'),
+  icmMessagesBody: document.getElementById('icmMessagesBody'),
+  bridgeStatsTotal: document.getElementById('bridgeStatsTotal'),
+  bridgeStatsPending: document.getElementById('bridgeStatsPending'),
+  bridgeStatsCompleted: document.getElementById('bridgeStatsCompleted'),
+  icmStatsTotal: document.getElementById('icmStatsTotal'),
+  icmStatsPending: document.getElementById('icmStatsPending'),
+  btnRefreshCrosschain: document.getElementById('btnRefreshCrosschain'),
 };
 
 const I18N = {
@@ -425,6 +436,28 @@ const I18N = {
     'log.runDone': 'full flow completed',
     'log.readyMessage': 'DR Agent Mission Cockpit initialized',
     'log.trimmedPrefix': '[log] older entries trimmed for performance',
+    'tab.crosschain': 'Cross-Chain',
+    'crosschain.title': 'Cross-Chain Dashboard',
+    'crosschain.bridgeTitle': 'Bridge Transfers',
+    'crosschain.icmTitle': 'ICM Messages',
+    'crosschain.refresh': 'Refresh',
+    'crosschain.direction': 'Direction',
+    'crosschain.amount': 'Amount',
+    'crosschain.status': 'Status',
+    'crosschain.sourceTx': 'Source Tx',
+    'crosschain.destTx': 'Dest Tx',
+    'crosschain.type': 'Type',
+    'crosschain.route': 'Route',
+    'crosschain.sender': 'Sender',
+    'crosschain.pending': 'Pending',
+    'crosschain.completed': 'Completed',
+    'crosschain.noTransfers': 'No bridge transfers yet.',
+    'crosschain.noMessages': 'No ICM messages yet.',
+    'visual.baselineTitle': 'Baseline Comparison',
+    'visual.confidence': 'Confidence',
+    'visual.recommended': 'Recommended',
+    'mission.bridgeStatus': 'Bridge',
+    'mission.icmStatus': 'ICM',
   },
   zh: {
     'page.title': 'DR Agent 任务驾驶舱',
@@ -728,6 +761,28 @@ const I18N = {
     'log.runDone': '全流程执行完成',
     'log.readyMessage': 'DR Agent Mission Cockpit 已初始化',
     'log.trimmedPrefix': '[日志] 为避免性能下降，已裁剪更早记录',
+    'tab.crosschain': '跨链',
+    'crosschain.title': '跨链仪表盘',
+    'crosschain.bridgeTitle': '桥转账',
+    'crosschain.icmTitle': '跨链消息',
+    'crosschain.refresh': '刷新',
+    'crosschain.direction': '方向',
+    'crosschain.amount': '金额',
+    'crosschain.status': '状态',
+    'crosschain.sourceTx': '源交易',
+    'crosschain.destTx': '目标交易',
+    'crosschain.type': '类型',
+    'crosschain.route': '路由',
+    'crosschain.sender': '发送者',
+    'crosschain.pending': '待处理',
+    'crosschain.completed': '已完成',
+    'crosschain.noTransfers': '暂无桥转账记录。',
+    'crosschain.noMessages': '暂无跨链消息。',
+    'visual.baselineTitle': '基线对比',
+    'visual.confidence': '置信度',
+    'visual.recommended': '推荐',
+    'mission.bridgeStatus': '桥',
+    'mission.icmStatus': 'ICM',
   },
 };
 
@@ -855,6 +910,12 @@ const state = {
     last: null,
     history: [],
   },
+  bridgeTransfers: [],
+  icmMessages: [],
+  bridgeStats: { total_transfers: 0, pending_count: 0, completed_count: 0 },
+  icmStats: { total_messages: 0, by_status: {}, by_type: {} },
+  dashboardSummary: null,
+  baselineComparison: null,
 };
 
 if (!el.eventIdInput.value) {
@@ -1758,6 +1819,17 @@ function renderMissionStrip(ui) {
   const health = state.lastError ? 'error' : summary?.health || ui.health;
   el.missionHealth.textContent = displayStatus(health);
   el.missionHealth.className = `status-chip ${health}`;
+
+  if (el.missionBridgeStatus) {
+    const bp = state.bridgeStats.pending_count;
+    el.missionBridgeStatus.textContent = bp > 0 ? `${bp} pending` : 'idle';
+    el.missionBridgeStatus.className = `value${bp > 0 ? ' status-warn' : ''}`;
+  }
+  if (el.missionICMStatus) {
+    const ip = (state.icmStats.by_status || {}).pending || 0;
+    el.missionICMStatus.textContent = ip > 0 ? `${ip} pending` : 'idle';
+    el.missionICMStatus.className = `value${ip > 0 ? ' status-warn' : ''}`;
+  }
 }
 
 function renderFlowTimeline(ui) {
@@ -2220,6 +2292,102 @@ function toggleCameraMode() {
   renderAll();
 }
 
+function renderCrosschainTab() {
+  if (el.bridgeTransfersBody) {
+    if (state.bridgeTransfers.length === 0) {
+      el.bridgeTransfersBody.innerHTML = `<tr><td colspan="5" class="empty-row">${t('crosschain.noTransfers')}</td></tr>`;
+    } else {
+      el.bridgeTransfersBody.innerHTML = state.bridgeTransfers.map(tx => {
+        const dir = tx.direction === 'home_to_remote' ? 'Home \u2192 Remote' : 'Remote \u2192 Home';
+        const sc = tx.status === 'completed' ? 'done' : (tx.status === 'initiated' ? 'pending' : 'in-progress');
+        return `<tr>
+          <td>${dir}</td>
+          <td class="mono">${tx.amount_wei} wei</td>
+          <td><span class="status-chip ${sc}">${tx.status}</span></td>
+          <td class="mono">${tx.source_tx_hash ? tx.source_tx_hash.slice(0, 10) + '\u2026' : '--'}</td>
+          <td class="mono">${tx.dest_tx_hash ? tx.dest_tx_hash.slice(0, 10) + '\u2026' : '--'}</td>
+        </tr>`;
+      }).join('');
+    }
+  }
+  if (el.icmMessagesBody) {
+    if (state.icmMessages.length === 0) {
+      el.icmMessagesBody.innerHTML = `<tr><td colspan="4" class="empty-row">${t('crosschain.noMessages')}</td></tr>`;
+    } else {
+      el.icmMessagesBody.innerHTML = state.icmMessages.map(msg => {
+        const typeLabel = msg.message_type.replace(/_/g, ' ');
+        const sc = msg.status === 'processed' ? 'done' : (msg.status === 'failed' ? 'error' : 'pending');
+        return `<tr>
+          <td><span class="icm-type-badge">${typeLabel}</span></td>
+          <td>${msg.source_chain} \u2192 ${msg.dest_chain}</td>
+          <td><span class="status-chip ${sc}">${msg.status}</span></td>
+          <td class="mono">${msg.sender.slice(0, 10)}\u2026</td>
+        </tr>`;
+      }).join('');
+    }
+  }
+  if (el.bridgeStatsTotal) el.bridgeStatsTotal.textContent = state.bridgeStats.total_transfers;
+  if (el.bridgeStatsPending) el.bridgeStatsPending.textContent = state.bridgeStats.pending_count;
+  if (el.bridgeStatsCompleted) el.bridgeStatsCompleted.textContent = state.bridgeStats.completed_count;
+  if (el.icmStatsTotal) el.icmStatsTotal.textContent = state.icmStats.total_messages;
+  if (el.icmStatsPending) {
+    const pending = (state.icmStats.by_status || {}).pending || 0;
+    el.icmStatsPending.textContent = pending;
+  }
+}
+
+function renderBaselineComparison() {
+  const card = document.getElementById('visualBaselineCard');
+  const container = document.getElementById('baselineMethodRows');
+  if (!card || !container || !state.baselineComparison) return;
+  card.classList.remove('hidden');
+  const { results, recommended } = state.baselineComparison;
+  if (!results || results.length === 0) return;
+  const maxKwh = Math.max(...results.map(r => r.baseline_kwh));
+  container.innerHTML = results.map(r => {
+    const pct = maxKwh > 0 ? (r.baseline_kwh / maxKwh * 100) : 0;
+    const isRec = r.method === recommended.method;
+    return `<div class="baseline-method-row ${isRec ? 'recommended' : ''}">
+      <div class="baseline-method-label">
+        <span class="baseline-method-name">${r.method}${isRec ? ' \u2605' : ''}</span>
+        <span class="baseline-confidence">${(r.confidence * 100).toFixed(0)}%</span>
+      </div>
+      <div class="baseline-bar-track">
+        <div class="baseline-bar-fill" style="width: ${pct.toFixed(1)}%"></div>
+      </div>
+      <span class="baseline-value mono">${r.baseline_kwh.toFixed(1)} kWh</span>
+    </div>`;
+  }).join('');
+}
+
+async function refreshCrosschainData() {
+  const { operatorKey } = cfg();
+  try {
+    const resp = await fetch(`${cfg().baseUrl}/v1/dashboard/summary`, {
+      headers: { 'x-api-key': operatorKey, 'x-actor-id': 'ui-user', 'Content-Type': 'application/json' },
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      state.dashboardSummary = data;
+      state.bridgeStats = data.bridge || state.bridgeStats;
+      state.icmStats = data.icm || state.icmStats;
+    }
+  } catch (_) { /* silent */ }
+  try {
+    const resp = await fetch(`${cfg().baseUrl}/v1/bridge/transfers/pending`, {
+      headers: { 'x-api-key': operatorKey, 'x-actor-id': 'ui-user', 'Content-Type': 'application/json' },
+    });
+    if (resp.ok) state.bridgeTransfers = await resp.json();
+  } catch (_) { /* silent */ }
+  try {
+    const resp = await fetch(`${cfg().baseUrl}/v1/icm/messages/pending`, {
+      headers: { 'x-api-key': operatorKey, 'x-actor-id': 'ui-user', 'Content-Type': 'application/json' },
+    });
+    if (resp.ok) state.icmMessages = await resp.json();
+  } catch (_) { /* silent */ }
+  renderCrosschainTab();
+}
+
 function renderAll() {
   const ui = deriveUiState();
   renderStaticI18n();
@@ -2236,6 +2404,8 @@ function renderAll() {
   applyActionGuards(ui);
   applyCameraMode(ui);
   renderTechnicalEvidence();
+  renderCrosschainTab();
+  renderBaselineComparison();
 }
 
 function localizeLogLabel(label) {
@@ -3066,7 +3236,12 @@ bindAction('btnGetEvent', getEvent, 'create');
 bindAction('btnGetRecords', getRecords, 'settle');
 bindAction('btnAudit', getAudit, 'audit');
 
+if (el.btnRefreshCrosschain) {
+  el.btnRefreshCrosschain.addEventListener('click', refreshCrosschainData);
+}
+
 renderAll();
 appendLog('ready', t('log.readyMessage'));
 refreshChainMode();
 refreshJudgeSummary();
+refreshCrosschainData();
