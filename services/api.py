@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import os
 import uuid
-from typing import Callable
+from typing import Any, Callable
 
 from fastapi import Body, Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 
 import pandas as pd
@@ -46,6 +47,7 @@ from services.dto import (
 )
 from services.icm import ICMService, MessageType
 from services.submitter import ServiceError, SubmitterService
+from services.task_queue import InMemoryTaskQueue, TaskType
 
 
 def _cors_origins() -> list[str]:
@@ -63,8 +65,29 @@ def _role_map() -> dict[str, str]:
     }
 
 
+def _resolve_jwt_secret() -> str | None:
+    return os.getenv("DR_JWT_SECRET")
+
+
 def _require_role(*roles: str) -> Callable:
     async def dependency(request: Request) -> str:
+        # Try JWT Bearer token first
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            jwt_secret = _resolve_jwt_secret()
+            if not jwt_secret:
+                raise ServiceError(401, "UNAUTHORIZED", "JWT not configured")
+            from services.auth import decode_token
+            try:
+                payload = decode_token(auth_header[7:], jwt_secret)
+            except ValueError:
+                raise ServiceError(401, "UNAUTHORIZED", "invalid or expired token")
+            role = payload.role.value
+            if role not in roles:
+                raise ServiceError(403, "FORBIDDEN", "insufficient role")
+            return role
+
+        # Fall back to API key
         api_key = request.headers.get("x-api-key", "")
         role = _role_map().get(api_key)
         if role is None:
@@ -90,6 +113,10 @@ async def _bridge_service(request: Request) -> BridgeService:
 
 async def _icm_service(request: Request) -> ICMService:
     return request.app.state.icm
+
+
+async def _task_queue(request: Request):
+    return request.app.state.task_queue
 
 
 def _chain_mode() -> str:
@@ -181,6 +208,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
     app.state.submitter = SubmitterService(db_path=db_path)
     app.state.bridge = BridgeService(db_path=db_path)
     app.state.icm = ICMService(db_path=db_path)
+    app.state.task_queue = InMemoryTaskQueue()
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_cors_origins(),
@@ -766,6 +794,46 @@ def create_app(db_path: str | None = None) -> FastAPI:
             icm=ICMStatsDTO(**icm_stats),
             baseline_methods=engine.available_methods(),
         )
+
+    # ---------- Task Queue Endpoints ----------
+
+    class TaskCreateRequest(BaseModel):
+        task_type: str
+        payload: dict[str, Any] = {}
+
+    @app.post("/v1/tasks")
+    async def create_task(
+        request: Request,
+        _role: str = Depends(_require_role("operator")),
+        queue=Depends(_task_queue),
+    ):
+        data = await request.json()
+        task_type_str = data.get("task_type", "")
+        payload = data.get("payload", {})
+        try:
+            tt = TaskType(task_type_str)
+        except ValueError:
+            raise ServiceError(422, "INVALID_TASK_TYPE", f"unknown task type: {task_type_str}")
+        task = queue.enqueue(tt, payload)
+        return task.to_dict()
+
+    @app.get("/v1/tasks/summary")
+    async def task_summary(
+        _role: str = Depends(_require_role("operator", "auditor")),
+        queue=Depends(_task_queue),
+    ):
+        return {"pending_count": queue.pending_count()}
+
+    @app.get("/v1/tasks/{task_id}")
+    async def get_task(
+        task_id: str,
+        _role: str = Depends(_require_role("operator", "auditor")),
+        queue=Depends(_task_queue),
+    ):
+        task = queue.get(task_id)
+        if task is None:
+            raise ServiceError(404, "TASK_NOT_FOUND", "task not found")
+        return task.to_dict()
 
     return app
 
