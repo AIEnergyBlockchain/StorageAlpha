@@ -2899,6 +2899,13 @@ function renderVisualInsights() {
   el.visualGrid.classList.toggle('hidden', !shouldShow);
   if (!shouldShow) return;
 
+  // P3-6: init map on first show, invalidateSize on subsequent shows
+  if (!siteMapInstance) {
+    setTimeout(() => initSiteMap(), 50);
+  } else {
+    setTimeout(() => siteMapInstance.invalidateSize(), 120);
+  }
+
   const baselineSummary = getBaselineConfidenceSummary();
   if (el.visualConfidenceWeight) {
     if (baselineSummary.confidence == null) {
@@ -4284,4 +4291,3 @@ appendLog('ready', t('log.readyMessage'));
 refreshChainMode();
 refreshJudgeSummary();
 refreshCrosschainData();
-initSiteMap();
