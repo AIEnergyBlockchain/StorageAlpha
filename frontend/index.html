@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title data-i18n="page.title">DR Agent Mission Cockpit</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9/dist/leaflet.css" />
   </head>
   <body>
     <div class="bg-grid"></div>
@@ -246,6 +247,11 @@
             <div class="chart-wrap"><canvas id="chartSettlementFlow"></canvas></div>
           </article>
 
+          <article id="visualSiteMapCard" class="visual-card">
+            <h3 data-i18n="visual.siteMapTitle">Site Locations</h3>
+            <div id="siteMap" class="site-map"></div>
+          </article>
+
           <article id="visualBaselineCard" class="visual-card">
             <h3 data-i18n="visual.baselineTitle">Baseline Methods</h3>
             <div id="baselineMethodRows" class="baseline-methods">
@@ -350,6 +356,17 @@
         >
           <span data-i18n="tab.crosschain">Cross-Chain</span>
         </button>
+        <button
+          id="tab-m2m-btn"
+          class="tab"
+          role="tab"
+          aria-selected="false"
+          aria-controls="tab-m2m"
+          tabindex="-1"
+          data-tab="m2m"
+        >
+          <span data-i18n="tab.m2m">M2M</span>
+        </button>
       </nav>
 
       <section id="tab-control" class="tab-panel panel reveal" role="tabpanel" aria-labelledby="tab-control-btn" style="--delay: 0.11s">
@@ -412,35 +429,53 @@
         </div>
 
         <div class="kpi-grid">
-          <article id="kpiCardStatus" class="kpi-card kpi-secondary" data-state="pending">
-            <p class="kpi-label" data-i18n="kpi.status">Status</p>
-            <p id="kpiStatus" class="kpi-value">pending</p>
-            <p id="kpiStatusHint" class="kpi-hint">Waiting for event creation.</p>
+          <article id="kpiCardStatus" class="kpi-card kpi-secondary kpi-flip-container" data-state="pending">
+            <div class="kpi-card-front">
+              <p class="kpi-label" data-i18n="kpi.status">Status</p>
+              <p id="kpiStatus" class="kpi-value">pending</p>
+              <p id="kpiStatusHint" class="kpi-hint">Waiting for event creation.</p>
+            </div>
+            <div class="kpi-card-back" data-i18n="kpi.statusDetail">Event lifecycle state: pending → active → closed → settled</div>
           </article>
-          <article id="kpiCardCoverage" class="kpi-card" data-state="pending">
-            <p class="kpi-label" data-i18n="kpi.coverage">Proof Coverage</p>
-            <p id="kpiCoverage" class="kpi-value">0 / 2 sites</p>
-            <p id="kpiCoverageHint" class="kpi-hint">No participant proofs submitted yet.</p>
+          <article id="kpiCardCoverage" class="kpi-card kpi-flip-container" data-state="pending">
+            <div class="kpi-card-front">
+              <p class="kpi-label" data-i18n="kpi.coverage">Proof Coverage</p>
+              <p id="kpiCoverage" class="kpi-value">0 / 2 sites</p>
+              <p id="kpiCoverageHint" class="kpi-hint">No participant proofs submitted yet.</p>
+            </div>
+            <div class="kpi-card-back" data-i18n="kpi.coverageDetail">Ratio of submitted proofs to required participant sites.</div>
           </article>
-          <article id="kpiCardPayout" class="kpi-card" data-state="pending">
-            <p class="kpi-label" data-i18n="kpi.totalPayout">Total Payout</p>
-            <p id="kpiPayout" class="kpi-value">0 DRT</p>
-            <p id="kpiPayoutHint" class="kpi-hint">Calculated after settlement.</p>
+          <article id="kpiCardPayout" class="kpi-card kpi-flip-container" data-state="pending">
+            <div class="kpi-card-front">
+              <p class="kpi-label" data-i18n="kpi.totalPayout">Total Payout</p>
+              <p id="kpiPayout" class="kpi-value">0 DRT</p>
+              <p id="kpiPayoutHint" class="kpi-hint">Calculated after settlement.</p>
+            </div>
+            <div class="kpi-card-back" data-i18n="kpi.payoutDetail">DRT reward = reduction_kwh × rate × confidence / 10000</div>
           </article>
-          <article id="kpiCardClaim" class="kpi-card kpi-secondary" data-state="pending">
-            <p class="kpi-label" data-i18n="kpi.claimA">Claim (site-a)</p>
-            <p id="kpiClaim" class="kpi-value">pending</p>
-            <p id="kpiClaimHint" class="kpi-hint">Awaiting claim action.</p>
+          <article id="kpiCardClaim" class="kpi-card kpi-secondary kpi-flip-container" data-state="pending">
+            <div class="kpi-card-front">
+              <p class="kpi-label" data-i18n="kpi.claimA">Claim (site-a)</p>
+              <p id="kpiClaim" class="kpi-value">pending</p>
+              <p id="kpiClaimHint" class="kpi-hint">Awaiting claim action.</p>
+            </div>
+            <div class="kpi-card-back" data-i18n="kpi.claimDetail">Participant withdraws earned DRT from Settlement contract.</div>
           </article>
-          <article id="kpiCardAudit" class="kpi-card" data-state="pending">
-            <p class="kpi-label" data-i18n="kpi.auditMatch">Audit Match</p>
-            <p id="kpiAudit" class="kpi-value">pending</p>
-            <p id="kpiAuditHint" class="kpi-hint">Hash verification not requested.</p>
+          <article id="kpiCardAudit" class="kpi-card kpi-flip-container" data-state="pending">
+            <div class="kpi-card-front">
+              <p class="kpi-label" data-i18n="kpi.auditMatch">Audit Match</p>
+              <p id="kpiAudit" class="kpi-value">pending</p>
+              <p id="kpiAuditHint" class="kpi-hint">Hash verification not requested.</p>
+            </div>
+            <div class="kpi-card-back" data-i18n="kpi.auditDetail">Off-chain proof hash vs on-chain anchored hash comparison.</div>
           </article>
-          <article id="kpiCardLatency" class="kpi-card kpi-secondary" data-state="pending">
-            <p class="kpi-label" data-i18n="kpi.latency">Latency</p>
-            <p id="kpiLatency" class="kpi-value">-- ms</p>
-            <p id="kpiLatencyHint" class="kpi-hint">Last API round-trip time.</p>
+          <article id="kpiCardLatency" class="kpi-card kpi-secondary kpi-flip-container" data-state="pending">
+            <div class="kpi-card-front">
+              <p class="kpi-label" data-i18n="kpi.latency">Latency</p>
+              <p id="kpiLatency" class="kpi-value">-- ms</p>
+              <p id="kpiLatencyHint" class="kpi-hint">Last API round-trip time.</p>
+            </div>
+            <div class="kpi-card-back" data-i18n="kpi.latencyDetail">Round-trip time from frontend request to API response.</div>
           </article>
         </div>
 
@@ -619,6 +654,44 @@
         </div>
       </section>
 
+      <section id="tab-m2m" class="tab-panel panel hidden" role="tabpanel" aria-labelledby="tab-m2m-btn">
+        <h2 data-i18n="m2m.title">M2M Auto-Settlement</h2>
+        <p class="hint" data-i18n="m2m.subtitle">Machine-to-machine device topology and automated micro-settlement flow.</p>
+        <div class="m2m-topology" id="m2mTopology">
+          <div class="m2m-device-grid" id="m2mDeviceGrid">
+            <div class="m2m-device" data-device="meter-a">
+              <div class="m2m-device-icon">&#x26A1;</div>
+              <span class="m2m-device-label">Meter A</span>
+              <span class="m2m-device-status" id="m2mStatusA">idle</span>
+            </div>
+            <div class="m2m-device m2m-device-hub">
+              <div class="m2m-device-icon">&#x2699;</div>
+              <span class="m2m-device-label" data-i18n="m2m.aggregator">Aggregator</span>
+              <span class="m2m-device-status" id="m2mStatusHub">idle</span>
+            </div>
+            <div class="m2m-device" data-device="meter-b">
+              <div class="m2m-device-icon">&#x26A1;</div>
+              <span class="m2m-device-label">Meter B</span>
+              <span class="m2m-device-status" id="m2mStatusB">idle</span>
+            </div>
+          </div>
+          <div class="m2m-flow-arrow" id="m2mFlowArrow">
+            <svg width="100%" height="40" viewBox="0 0 400 40" preserveAspectRatio="none">
+              <line x1="60" y1="20" x2="180" y2="20" stroke="rgba(59,217,255,0.4)" stroke-width="2" stroke-dasharray="6 4"/>
+              <line x1="220" y1="20" x2="340" y2="20" stroke="rgba(67,243,155,0.4)" stroke-width="2" stroke-dasharray="6 4"/>
+              <polygon points="180,14 192,20 180,26" fill="rgba(59,217,255,0.6)"/>
+              <polygon points="220,14 208,20 220,26" fill="rgba(67,243,155,0.6)"/>
+            </svg>
+          </div>
+          <div class="m2m-settlement-log" id="m2mSettlementLog">
+            <p class="hint" data-i18n="m2m.logEmpty">Run the M2M demo to see auto-settlement events.</p>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="btnM2mDemo" class="btn" data-i18n="m2m.runDemo">Run M2M Demo</button>
+        </div>
+      </section>
+
       <section class="panel evidence-toggle-row reveal" style="--delay: 0.16s">
         <div class="evidence-tools">
           <button id="evidenceToggle" class="btn btn-ghost" aria-controls="technicalEvidence" aria-expanded="false">
@@ -638,6 +711,7 @@
       </section>
     </main>
 
+    <script src="https://unpkg.com/leaflet@1.9/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
     <script src="./app.js"></script>
   </body>

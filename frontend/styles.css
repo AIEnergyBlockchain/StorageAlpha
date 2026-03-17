@@ -1158,6 +1158,41 @@ input:focus {
   box-shadow: var(--glow-red);
 }
 
+/* ── P2-8: KPI card 3D flip ──────────────────────────────── */
+.kpi-flip-container {
+  perspective: 600px;
+  cursor: pointer;
+}
+.kpi-flip-container .kpi-card-front,
+.kpi-flip-container .kpi-card-back {
+  backface-visibility: hidden;
+  transition: transform 0.5s ease;
+}
+.kpi-flip-container .kpi-card-front {
+  position: relative;
+}
+.kpi-flip-container .kpi-card-back {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.4;
+  background: linear-gradient(145deg, rgba(24, 39, 67, 0.9), rgba(13, 24, 43, 0.9));
+  border-radius: 12px;
+  transform: rotateY(180deg);
+}
+.kpi-flip-container.is-flipped .kpi-card-front {
+  transform: rotateY(180deg);
+}
+.kpi-flip-container.is-flipped .kpi-card-back {
+  transform: rotateY(0deg);
+}
+
 .kpi-secondary {
   opacity: 0.84;
 }
@@ -2164,6 +2199,71 @@ body[data-view="engineering"] .story-crosschain-summary {
   font-size: 1.8rem;
   margin-bottom: 6px;
   opacity: 0.5;
+}
+
+/* ── P3-6: Site map ──────────────────────────────────────── */
+#siteMap, .site-map {
+  width: 100%;
+  height: 220px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(8, 16, 30, 0.8);
+}
+
+/* ── P2-5: M2M Dashboard ─────────────────────────────────── */
+.m2m-topology { margin: 12px 0; }
+.m2m-device-grid {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.m2m-device {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(18, 29, 51, 0.6);
+  min-width: 90px;
+}
+.m2m-device-hub { border-color: rgba(143, 109, 255, 0.5); }
+.m2m-device-icon { font-size: 1.5rem; }
+.m2m-device-label { font-size: 0.78rem; font-weight: 600; }
+.m2m-device-status {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.m2m-device-status.active { color: var(--accent-cyan); }
+.m2m-device-status.done { color: var(--accent-lime); }
+.m2m-flow-arrow {
+  display: flex;
+  justify-content: center;
+  margin: -8px 0;
+}
+.m2m-settlement-log {
+  max-height: 160px;
+  overflow-y: auto;
+  margin-top: 12px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(8, 16, 30, 0.6);
+  font-family: monospace;
+  font-size: 0.76rem;
+}
+.m2m-log-line {
+  margin: 2px 0;
+  color: var(--text-muted);
+  animation: fadeSlideIn 0.3s ease;
+}
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* ── P1: Chart containers ────────────────────────────────── */

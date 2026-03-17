@@ -15,8 +15,9 @@ const panels = {
   event: document.getElementById('tab-event'),
   audit: document.getElementById('tab-audit'),
   crosschain: document.getElementById('tab-crosschain'),
+  m2m: document.getElementById('tab-m2m'),
 };
-const TAB_ORDER = ['control', 'event', 'audit', 'crosschain'];
+const TAB_ORDER = ['control', 'event', 'audit', 'crosschain', 'm2m'];
 const MAX_LOG_ENTRIES = 320;
 const MAX_STEP_TIMING_ENTRIES = 24;
 const PENDING_TX_WAIT_TIMEOUT_MS = 120000;
@@ -219,6 +220,7 @@ const I18N = {
     'visual.settlementFlowTitle': 'Settlement Flow',
     'visual.settlementPool': 'Settlement Pool',
     'visual.remaining': 'Remaining',
+    'visual.siteMapTitle': 'Site Locations',
     'action.next': 'Execute Next Step',
     'action.runAll': 'Auto Run Full Flow',
     'builder.mode': 'Builder Mode',
@@ -500,6 +502,16 @@ const I18N = {
     'log.readyMessage': 'DR Agent Mission Cockpit initialized',
     'log.trimmedPrefix': '[log] older entries trimmed for performance',
     'tab.crosschain': 'Cross-Chain',
+    'tab.m2m': 'M2M',
+    'm2m.title': 'M2M Auto-Settlement',
+    'm2m.subtitle': 'Machine-to-machine device topology and automated micro-settlement flow.',
+    'm2m.aggregator': 'Aggregator',
+    'm2m.runDemo': 'Run M2M Demo',
+    'm2m.logEmpty': 'Run the M2M demo to see auto-settlement events.',
+    'm2m.reading': 'Reading: {value} kWh',
+    'm2m.settling': 'Auto-settling {device}...',
+    'm2m.settled': '{device} settled: {payout} DRT',
+    'm2m.complete': 'M2M demo complete — {count} micro-settlements.',
     'crosschain.title': 'Cross-Chain Dashboard',
     'crosschain.bridgeTitle': 'Bridge Transfers',
     'crosschain.icmTitle': 'ICM Messages',
@@ -575,6 +587,7 @@ const I18N = {
     'visual.settlementFlowTitle': '结算流向',
     'visual.settlementPool': '结算池',
     'visual.remaining': '剩余',
+    'visual.siteMapTitle': '站点位置',
     'action.next': '执行下一步',
     'action.runAll': '自动跑完整流程',
     'builder.mode': '构建模式',
@@ -856,6 +869,16 @@ const I18N = {
     'log.readyMessage': 'DR Agent Mission Cockpit 已初始化',
     'log.trimmedPrefix': '[日志] 为避免性能下降，已裁剪更早记录',
     'tab.crosschain': '跨链',
+    'tab.m2m': 'M2M',
+    'm2m.title': 'M2M 自动结算',
+    'm2m.subtitle': '设备间拓扑结构与自动化微结算流程。',
+    'm2m.aggregator': '聚合器',
+    'm2m.runDemo': '运行 M2M 演示',
+    'm2m.logEmpty': '运行 M2M 演示以查看自动结算事件。',
+    'm2m.reading': '读数: {value} kWh',
+    'm2m.settling': '正在自动结算 {device}...',
+    'm2m.settled': '{device} 已结算: {payout} DRT',
+    'm2m.complete': 'M2M 演示完成 — {count} 笔微结算。',
     'crosschain.title': '跨链仪表盘',
     'crosschain.bridgeTitle': '桥转账',
     'crosschain.icmTitle': '跨链消息',
@@ -2839,6 +2862,20 @@ function showErrorRipple(element) {
   element.addEventListener('animationend', () => element.classList.remove('error-ripple'), { once: true });
 }
 
+/* ── P2-2: Data flow ticker — stream points into charts ──── */
+function tickerAddPoint(chart, label, values, maxPoints) {
+  if (!chart) return;
+  chart.data.labels.push(label);
+  values.forEach((v, i) => {
+    if (chart.data.datasets[i]) chart.data.datasets[i].data.push(v);
+  });
+  if (maxPoints && chart.data.labels.length > maxPoints) {
+    chart.data.labels.shift();
+    chart.data.datasets.forEach((ds) => ds.data.shift());
+  }
+  chart.update('none');
+}
+
 function renderVisualInsights() {
   if (!el.visualInsights || !el.visualGrid || !el.visualEmpty) return;
 
@@ -3046,6 +3083,97 @@ function toggleCameraMode() {
   if (el.btnCameraMode) el.btnCameraMode.setAttribute('aria-pressed', String(state.cameraMode));
   renderAll();
 }
+
+/* ── P3-6: Site map (Leaflet) ────────────────────────────── */
+let siteMapInstance = null;
+const SITE_LOCATIONS = [
+  { id: 'site-a', label: 'Site A — Industrial Park', lat: 34.052, lng: -118.244, color: CHART_CYAN },
+  { id: 'site-b', label: 'Site B — Commercial Campus', lat: 34.062, lng: -118.230, color: CHART_LIME },
+  { id: 'aggregator', label: 'DR Aggregator', lat: 34.057, lng: -118.237, color: CHART_PURPLE },
+];
+
+function initSiteMap() {
+  if (siteMapInstance || typeof L === 'undefined') return;
+  const container = document.getElementById('siteMap');
+  if (!container) return;
+  siteMapInstance = L.map(container, { zoomControl: false, attributionControl: false }).setView([34.057, -118.237], 14);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+  }).addTo(siteMapInstance);
+  SITE_LOCATIONS.forEach((site) => {
+    L.circleMarker([site.lat, site.lng], {
+      radius: site.id === 'aggregator' ? 10 : 7,
+      color: site.color,
+      fillColor: site.color,
+      fillOpacity: 0.35,
+      weight: 2,
+    }).addTo(siteMapInstance).bindPopup(`<b>${site.label}</b><br/>ID: ${site.id}`);
+  });
+  // Connection lines
+  L.polyline(
+    [[SITE_LOCATIONS[0].lat, SITE_LOCATIONS[0].lng], [SITE_LOCATIONS[2].lat, SITE_LOCATIONS[2].lng]],
+    { color: CHART_CYAN, weight: 1.5, opacity: 0.4, dashArray: '6 4' }
+  ).addTo(siteMapInstance);
+  L.polyline(
+    [[SITE_LOCATIONS[1].lat, SITE_LOCATIONS[1].lng], [SITE_LOCATIONS[2].lat, SITE_LOCATIONS[2].lng]],
+    { color: CHART_LIME, weight: 1.5, opacity: 0.4, dashArray: '6 4' }
+  ).addTo(siteMapInstance);
+}
+
+/* ── P2-5: M2M Dashboard Mock ────────────────────────────── */
+const m2mDevices = [
+  { id: 'meter-a', label: 'Meter A', baseline: 120, reduction: 18 },
+  { id: 'meter-b', label: 'Meter B', baseline: 95, reduction: 12 },
+];
+
+function renderM2M() {
+  // Static rendering — topology is in HTML, animation via animateM2MSettlement
+}
+
+async function animateM2MSettlement() {
+  const log = document.getElementById('m2mSettlementLog');
+  const statusA = document.getElementById('m2mStatusA');
+  const statusB = document.getElementById('m2mStatusB');
+  const statusHub = document.getElementById('m2mStatusHub');
+  if (!log) return;
+  log.innerHTML = '';
+  let count = 0;
+
+  for (const device of m2mDevices) {
+    const statusEl = device.id === 'meter-a' ? statusA : statusB;
+
+    // Reading phase
+    if (statusEl) { statusEl.textContent = 'reading'; statusEl.className = 'm2m-device-status active'; }
+    appendM2MLog(log, t('m2m.reading', { value: device.baseline }));
+    await sleep(600);
+
+    // Settling phase
+    if (statusHub) { statusHub.textContent = 'settling'; statusHub.className = 'm2m-device-status active'; }
+    if (statusEl) { statusEl.textContent = 'settling'; }
+    appendM2MLog(log, t('m2m.settling', { device: device.label }));
+    await sleep(800);
+
+    // Settled
+    const payout = Math.round(device.reduction * 50);
+    if (statusEl) { statusEl.textContent = 'settled'; statusEl.className = 'm2m-device-status done'; }
+    appendM2MLog(log, t('m2m.settled', { device: device.label, payout }));
+    count++;
+    await sleep(400);
+  }
+
+  if (statusHub) { statusHub.textContent = 'done'; statusHub.className = 'm2m-device-status done'; }
+  appendM2MLog(log, t('m2m.complete', { count }));
+}
+
+function appendM2MLog(container, text) {
+  const line = document.createElement('p');
+  line.className = 'm2m-log-line';
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+  container.appendChild(line);
+  container.scrollTop = container.scrollHeight;
+}
+
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 function renderCrosschainTab() {
   if (el.bridgeTransfersBody) {
@@ -4140,6 +4268,15 @@ bindAction('btnAudit', getAudit, 'audit');
 
 if (el.btnRefreshCrosschain) {
   el.btnRefreshCrosschain.addEventListener('click', refreshCrosschainData);
+
+  // P2-5: M2M demo button
+  const btnM2m = document.getElementById('btnM2mDemo');
+  if (btnM2m) btnM2m.addEventListener('click', animateM2MSettlement);
+
+  // P2-8: KPI card flip on click
+  document.querySelectorAll('.kpi-flip-container').forEach((card) => {
+    card.addEventListener('click', () => card.classList.toggle('is-flipped'));
+  });
 }
 
 renderAll();
@@ -4147,3 +4284,4 @@ appendLog('ready', t('log.readyMessage'));
 refreshChainMode();
 refreshJudgeSummary();
 refreshCrosschainData();
+initSiteMap();
