@@ -507,6 +507,8 @@ const I18N = {
     'm2m.subtitle': 'Machine-to-machine device topology and automated micro-settlement flow.',
     'm2m.aggregator': 'Aggregator',
     'm2m.runDemo': 'Run M2M Demo',
+    'm2m.drtSettlement': 'DRT Settlement',
+    'm2m.kwhReadings': 'kWh Readings',
     'm2m.logEmpty': 'Run the M2M demo to see auto-settlement events.',
     'm2m.reading': 'Reading: {value} kWh',
     'm2m.settling': 'Auto-settling {device}...',
@@ -879,6 +881,8 @@ const I18N = {
     'm2m.subtitle': '设备间拓扑结构与自动化微结算流程。',
     'm2m.aggregator': '聚合器',
     'm2m.runDemo': '运行 M2M 演示',
+    'm2m.drtSettlement': 'DRT 结算',
+    'm2m.kwhReadings': 'kWh 读数',
     'm2m.logEmpty': '运行 M2M 演示以查看自动结算事件。',
     'm2m.reading': '读数: {value} kWh',
     'm2m.settling': '正在自动结算 {device}...',
@@ -1397,6 +1401,9 @@ function applyViewMode(mode) {
     item.node.classList.toggle('is-active', active);
     item.node.setAttribute('aria-selected', String(active));
   }
+
+  // Reset demo mode when switching views
+  if (typeof setDemoMode === 'function' && activeDemoMode) setDemoMode(null);
 
   if (next === 'engineering') {
     state.evidenceOpen = true;

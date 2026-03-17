@@ -1855,6 +1855,11 @@ body[data-view="engineering"] #storyAgentInsight {
   display: none !important;
 }
 
+body[data-view="engineering"] #inlineCrosschainDemo,
+body[data-view="engineering"] #inlineM2mDemo {
+  display: none !important;
+}
+
 body[data-view="engineering"] #technicalEvidence {
   display: block !important;
 }
