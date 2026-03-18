@@ -25,6 +25,7 @@ const PENDING_TX_POLL_MS = 1200;
 const STEP_ANIMATION_DELAY = 900;
 const HERO_TITLE_MAX_CHARS = 55;
 const HERO_SUBTITLE_MAX_CHARS = 90;
+const API_TIMEOUT_MS = 15000;
 
 const el = {
   log: document.getElementById('log'),
@@ -2380,7 +2381,8 @@ function renderMissionStrip(ui) {
 }
 
 function renderFlowTimeline(ui) {
-  for (const step of FLOW_STEPS) {
+  for (let i = 0; i < FLOW_STEPS.length; i++) {
+    const step = FLOW_STEPS[i];
     const node = document.getElementById(`step-${step.id}`);
     if (!node) continue;
     const status = flowStepStatus(step.id, ui);
@@ -2388,6 +2390,8 @@ function renderFlowTimeline(ui) {
     node.classList.add(status);
     const statusNode = node.querySelector('.step-state');
     if (statusNode) statusNode.textContent = displayStatus(status);
+    node.setAttribute('aria-label', `Step ${i + 1}: ${step.label} \u2014 ${displayStatus(status)}`);
+    node.setAttribute('aria-current', status === 'in-progress' ? 'step' : 'false');
   }
 }
 
@@ -3511,38 +3515,78 @@ async function runCrosschainDemo() {
   appendLog('crosschain', t('crosschain.demoComplete'));
 }
 
+function createTableCell(text, className) {
+  const td = document.createElement('td');
+  if (className) td.className = className;
+  td.textContent = text;
+  return td;
+}
+
+function createEmptyRow(colspan, iconHtml, msgKey) {
+  const tr = document.createElement('tr');
+  const td = document.createElement('td');
+  td.setAttribute('colspan', colspan);
+  td.className = 'empty-row empty-row-guided';
+  const iconSpan = document.createElement('span');
+  iconSpan.className = 'empty-icon';
+  iconSpan.textContent = '\u21C6';
+  const textSpan = document.createElement('span');
+  textSpan.textContent = t(msgKey);
+  td.appendChild(iconSpan);
+  td.appendChild(textSpan);
+  tr.appendChild(td);
+  return tr;
+}
+
 function renderCrosschainTab() {
   if (el.bridgeTransfersBody) {
+    el.bridgeTransfersBody.textContent = '';
     if (state.bridgeTransfers.length === 0) {
-      el.bridgeTransfersBody.innerHTML = `<tr><td colspan="5" class="empty-row empty-row-guided"><span class="empty-icon">&#x21C6;</span><span>${t('crosschain.noTransfersGuide')}</span></td></tr>`;
+      el.bridgeTransfersBody.appendChild(createEmptyRow(5, '\u21C6', 'crosschain.noTransfersGuide'));
     } else {
-      el.bridgeTransfersBody.innerHTML = state.bridgeTransfers.map(tx => {
+      state.bridgeTransfers.forEach(tx => {
+        const tr = document.createElement('tr');
         const dir = tx.direction === 'home_to_remote' ? 'Home \u2192 Remote' : 'Remote \u2192 Home';
         const sc = tx.status === 'completed' ? 'done' : (tx.status === 'initiated' ? 'pending' : 'in-progress');
-        return `<tr>
-          <td>${dir}</td>
-          <td class="mono">${tx.amount_wei} wei</td>
-          <td><span class="status-chip ${sc}">${tx.status}</span></td>
-          <td class="mono">${tx.source_tx_hash ? tx.source_tx_hash.slice(0, 10) + '\u2026' : '--'}</td>
-          <td class="mono">${tx.dest_tx_hash ? tx.dest_tx_hash.slice(0, 10) + '\u2026' : '--'}</td>
-        </tr>`;
-      }).join('');
+        tr.appendChild(createTableCell(dir));
+        tr.appendChild(createTableCell(tx.amount_wei + ' wei', 'mono'));
+        const statusTd = document.createElement('td');
+        const chip = document.createElement('span');
+        chip.className = 'status-chip ' + sc;
+        chip.textContent = tx.status;
+        statusTd.appendChild(chip);
+        tr.appendChild(statusTd);
+        tr.appendChild(createTableCell(tx.source_tx_hash ? tx.source_tx_hash.slice(0, 10) + '\u2026' : '--', 'mono'));
+        tr.appendChild(createTableCell(tx.dest_tx_hash ? tx.dest_tx_hash.slice(0, 10) + '\u2026' : '--', 'mono'));
+        el.bridgeTransfersBody.appendChild(tr);
+      });
     }
   }
   if (el.icmMessagesBody) {
+    el.icmMessagesBody.textContent = '';
     if (state.icmMessages.length === 0) {
-      el.icmMessagesBody.innerHTML = `<tr><td colspan="4" class="empty-row empty-row-guided"><span class="empty-icon">&#x21C6;</span><span>${t('crosschain.noMessagesGuide')}</span></td></tr>`;
+      el.icmMessagesBody.appendChild(createEmptyRow(4, '\u21C6', 'crosschain.noMessagesGuide'));
     } else {
-      el.icmMessagesBody.innerHTML = state.icmMessages.map(msg => {
+      state.icmMessages.forEach(msg => {
+        const tr = document.createElement('tr');
         const typeLabel = msg.message_type.replace(/_/g, ' ');
         const sc = msg.status === 'processed' ? 'done' : (msg.status === 'failed' ? 'error' : 'pending');
-        return `<tr>
-          <td><span class="icm-type-badge">${typeLabel}</span></td>
-          <td>${msg.source_chain} \u2192 ${msg.dest_chain}</td>
-          <td><span class="status-chip ${sc}">${msg.status}</span></td>
-          <td class="mono">${msg.sender.slice(0, 10)}\u2026</td>
-        </tr>`;
-      }).join('');
+        const typeTd = document.createElement('td');
+        const badge = document.createElement('span');
+        badge.className = 'icm-type-badge';
+        badge.textContent = typeLabel;
+        typeTd.appendChild(badge);
+        tr.appendChild(typeTd);
+        tr.appendChild(createTableCell(msg.source_chain + ' \u2192 ' + msg.dest_chain));
+        const statusTd = document.createElement('td');
+        const chip = document.createElement('span');
+        chip.className = 'status-chip ' + sc;
+        chip.textContent = msg.status;
+        statusTd.appendChild(chip);
+        tr.appendChild(statusTd);
+        tr.appendChild(createTableCell(msg.sender.slice(0, 10) + '\u2026', 'mono'));
+        el.icmMessagesBody.appendChild(tr);
+      });
     }
   }
   if (el.bridgeStatsTotal) el.bridgeStatsTotal.textContent = state.bridgeStats.total_transfers;
@@ -3739,6 +3783,16 @@ async function refreshCrosschainData() {
   renderCrosschainTab();
 }
 
+let _renderScheduled = false;
+function scheduleRender() {
+  if (_renderScheduled) return;
+  _renderScheduled = true;
+  requestAnimationFrame(() => {
+    _renderScheduled = false;
+    renderAll();
+  });
+}
+
 function renderAll() {
   const prevStep = renderAll._lastStep || null;
   const ui = deriveUiState();
@@ -3846,6 +3900,9 @@ async function callApi(path, method, body, apiKey, actorId = 'ui-user', options 
   const start = performance.now();
   const { baseUrl } = cfg();
   let response;
+  const timeout = options.timeout ?? API_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
 
   try {
     response = await fetch(`${baseUrl}${path}`, {
@@ -3856,8 +3913,10 @@ async function callApi(path, method, body, apiKey, actorId = 'ui-user', options 
         'x-actor-id': actorId,
       },
       body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
     });
   } finally {
+    clearTimeout(timer);
     state.lastLatencyMs = performance.now() - start;
     if (state.timing.current && options.trackStepTiming !== false) {
       state.timing.current.apiMs = state.lastLatencyMs;

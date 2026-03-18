@@ -53,6 +53,24 @@ body[data-theme="neon"] {
   box-sizing: border-box;
 }
 
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 0;
+  z-index: 9999;
+  padding: 8px 16px;
+  background: var(--panel);
+  color: var(--text-strong);
+  border: 1px solid var(--accent-cyan);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+.skip-link:focus {
+  top: 8px;
+  left: 8px;
+}
+
 body {
   margin: 0;
   min-height: 100vh;

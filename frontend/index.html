@@ -16,6 +16,7 @@
     <div class="bg-glow glow-a"></div>
     <div class="bg-glow glow-b"></div>
 
+    <a class="skip-link" href="#storyHero">Skip to main content</a>
     <main class="cockpit">
       <header class="hero">
         <p class="eyebrow" data-i18n="hero.eyebrow">Protocol Demo | Execution Review</p>
@@ -93,7 +94,7 @@
             <button id="btnNextStep" class="btn" data-i18n="action.next">Execute Next Step</button>
           </div>
         </div>
-        <div class="story-kpi-row">
+        <div class="story-kpi-row" role="region" aria-label="Key metrics" aria-live="polite">
           <article class="story-kpi" data-kpi="energy">
             <p class="label" data-i18n="story.energyReduction">Energy Reduction</p>
             <p id="storyEnergy" class="value">-- kWh</p>
@@ -120,7 +121,7 @@
         </div>
       </section>
 
-      <section id="storyAgentInsight" class="panel story-agent-insight reveal" style="--delay: 0.063s">
+      <section id="storyAgentInsight" class="panel story-agent-insight reveal" aria-live="polite" aria-atomic="false" style="--delay: 0.063s">
         <div class="story-agent-head">
           <h3 data-i18n="evidence.agentInsight">Agent Insight</h3>
           <p class="hint" data-i18n="story.agentInsightHint">Live signal from the on-chain agent, with confidence and risk flags.</p>
@@ -501,33 +502,33 @@
           </div>
         </div>
 
-        <div class="flow-timeline">
-          <span id="step-create" class="step-pill pending">
+        <div class="flow-timeline" role="list" aria-label="Settlement flow steps">
+          <span id="step-create" class="step-pill pending" role="listitem" aria-label="Step 1: Create — pending" aria-current="false">
             <span class="step-num">1</span>
             <span class="step-name" data-i18n="step.create">Create</span>
             <span class="step-state">pending</span>
           </span>
-          <span id="step-proofs" class="step-pill pending">
+          <span id="step-proofs" class="step-pill pending" role="listitem" aria-label="Step 2: Proofs — pending" aria-current="false">
             <span class="step-num">2</span>
             <span class="step-name" data-i18n="step.proofs">Proofs</span>
             <span class="step-state">pending</span>
           </span>
-          <span id="step-close" class="step-pill pending">
+          <span id="step-close" class="step-pill pending" role="listitem" aria-label="Step 3: Close — pending" aria-current="false">
             <span class="step-num">3</span>
             <span class="step-name" data-i18n="step.close">Close</span>
             <span class="step-state">pending</span>
           </span>
-          <span id="step-settle" class="step-pill pending">
+          <span id="step-settle" class="step-pill pending" role="listitem" aria-label="Step 4: Settle — pending" aria-current="false">
             <span class="step-num">4</span>
             <span class="step-name" data-i18n="step.settle">Settle</span>
             <span class="step-state">pending</span>
           </span>
-          <span id="step-claim" class="step-pill pending">
+          <span id="step-claim" class="step-pill pending" role="listitem" aria-label="Step 5: Claim — pending" aria-current="false">
             <span class="step-num">5</span>
             <span class="step-name" data-i18n="step.claim">Claim</span>
             <span class="step-state">pending</span>
           </span>
-          <span id="step-audit" class="step-pill pending">
+          <span id="step-audit" class="step-pill pending" role="listitem" aria-label="Step 6: Audit — pending" aria-current="false">
             <span class="step-num">6</span>
             <span class="step-name" data-i18n="step.audit">Audit</span>
             <span class="step-state">pending</span>
@@ -648,7 +649,7 @@
             <p id="anomalyRecommendation" class="muted-line"></p>
             <div id="anomalyAffectedList" class="anomaly-affected"></div>
           </article>
-          <article id="errorCard" class="evidence-card error-card card-diagnostics" data-level="ok">
+          <article id="errorCard" class="evidence-card error-card card-diagnostics" data-level="ok" aria-live="assertive">
             <h3 data-i18n="evidence.executionDiagnostics">Execution Diagnostics</h3>
             <p id="errorHeadline">No active errors.</p>
             <p id="errorHint" class="muted-line">Flow guards prevent most invalid actions.</p>
